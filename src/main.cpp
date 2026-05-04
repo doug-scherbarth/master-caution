@@ -2,9 +2,8 @@
 // Thin Arduino-style shim. All real logic lives in lib/app/ as portable C.
 
 extern "C" {
-    void app_init(void);
-    void app_tick(void);
+#include "app.h"
 }
 
-void setup(void) { app_init(); }
-void loop(void)  { app_tick(); }
+extern "C" void setup(void) { app_init(); }
+extern "C" void loop(void)  { app_tick(); }
