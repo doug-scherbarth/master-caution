@@ -15,14 +15,17 @@ void hal_mock_reset(void);
 void hal_mock_set_busy(bool busy);
 void hal_mock_set_sd_ok(bool ok);
 void hal_mock_set_alarm(uint8_t ch, bool val);
+void hal_mock_set_dimmer_raw(uint16_t val);
 
 #define RED   hal_led_duty[HAL_LED_RED]
 #define GREEN hal_led_duty[HAL_LED_GREEN]
 #define BLUE  hal_led_duty[HAL_LED_BLUE]
 
-#define LED_MS   500u
-#define WHITE_MS 400u
-#define FLASH_MS 250u
+#define LED_MS        500u
+#define WHITE_MS      400u
+#define FLASH_MS      250u
+#define AMBER_HALF_MS 250u
+#define AMBER_DUR_MS 2000u
 
 #define WAV_LO  13
 #define WAV_MID 14
@@ -245,6 +248,85 @@ void test_ch_fault_then_sd_error(void) {
     TEST_ASSERT_EQUAL(4095, hal_led_duty[HAL_LED_RED]);
 }
 
+// --- Dimmer pot check ----------------------------------------------
+
+void test_mid_range_dimmer_no_warn(void) {
+    // Default mock dimmer (2048) → no amber, proceeds straight to tones
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(1, hal_play_calls);
+    TEST_ASSERT_EQUAL(0, RED);
+    TEST_ASSERT_EQUAL(0, GREEN);
+}
+
+void test_dimmer_low_triggers_amber(void) {
+    hal_mock_set_dimmer_raw(50);
+    startup_init(0);
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(4095, RED);
+    TEST_ASSERT_EQUAL(4095, GREEN);
+    TEST_ASSERT_EQUAL(0,    BLUE);
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);
+}
+
+void test_dimmer_high_triggers_amber(void) {
+    hal_mock_set_dimmer_raw(4000);
+    startup_init(0);
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(4095, RED);
+    TEST_ASSERT_EQUAL(4095, GREEN);
+    TEST_ASSERT_EQUAL(0,    BLUE);
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);
+}
+
+void test_dimmer_warn_amber_toggles_at_2hz(void) {
+    hal_mock_set_dimmer_raw(50);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + AMBER_HALF_MS);        // 250ms → off
+    TEST_ASSERT_EQUAL(0, RED);
+    TEST_ASSERT_EQUAL(0, GREEN);
+    startup_tick(t + AMBER_HALF_MS * 2);    // 500ms → on
+    TEST_ASSERT_EQUAL(4095, RED);
+    TEST_ASSERT_EQUAL(4095, GREEN);
+}
+
+void test_dimmer_warn_proceeds_to_tones_after_2s(void) {
+    hal_mock_set_dimmer_raw(50);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + AMBER_DUR_MS);
+    TEST_ASSERT_EQUAL(1, hal_play_calls);
+    TEST_ASSERT_EQUAL(0, RED);
+    TEST_ASSERT_EQUAL(0, GREEN);
+}
+
+void test_dimmer_warn_then_sd_error(void) {
+    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_sd_ok(false);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + AMBER_DUR_MS);   // dimmer done → SS_SD_ERROR
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);
+    TEST_ASSERT_EQUAL(4095, RED);
+    TEST_ASSERT_EQUAL(0,    GREEN);
+}
+
+void test_ch_fault_then_dimmer_warn(void) {
+    hal_mock_set_alarm(CH_CO_DETECT, true);
+    hal_mock_set_dimmer_raw(50);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + 3000);   // ch_fault done → SS_DIMMER_WARN
+    TEST_ASSERT_EQUAL(4095, RED);
+    TEST_ASSERT_EQUAL(4095, GREEN);
+    TEST_ASSERT_EQUAL(0,    BLUE);
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);
+}
+
 // --- SD error path -------------------------------------------------
 
 static void advance_to_after_white(void) {
@@ -323,6 +405,13 @@ int main(void) {
     RUN_TEST(test_ch_fault_blue_toggles_at_4hz);
     RUN_TEST(test_ch_fault_proceeds_to_tones_after_3s);
     RUN_TEST(test_ch_fault_then_sd_error);
+    RUN_TEST(test_mid_range_dimmer_no_warn);
+    RUN_TEST(test_dimmer_low_triggers_amber);
+    RUN_TEST(test_dimmer_high_triggers_amber);
+    RUN_TEST(test_dimmer_warn_amber_toggles_at_2hz);
+    RUN_TEST(test_dimmer_warn_proceeds_to_tones_after_2s);
+    RUN_TEST(test_dimmer_warn_then_sd_error);
+    RUN_TEST(test_ch_fault_then_dimmer_warn);
     RUN_TEST(test_sd_error_skips_tones_and_fast_flashes_red);
     RUN_TEST(test_sd_error_red_toggles_at_5hz);
     RUN_TEST(test_sd_error_transitions_to_ack_wait_after_5s);

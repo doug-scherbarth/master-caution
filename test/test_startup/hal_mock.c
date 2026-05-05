@@ -10,9 +10,10 @@ int      hal_play_calls     = 0;
 uint8_t  hal_play_log[16];
 int      hal_play_log_count = 0;
 
-static bool g_busy   = false;
-static bool g_sd_ok  = true;
-static bool g_alarm[CHANNEL_COUNT];
+static bool     g_busy        = false;
+static bool     g_sd_ok       = true;
+static bool     g_alarm[CHANNEL_COUNT];
+static uint16_t g_dimmer_raw  = 2048;
 
 void hal_mock_reset(void) {
     for (int i = 0; i < 4; i++) hal_led_duty[i] = 0;
@@ -20,12 +21,14 @@ void hal_mock_reset(void) {
     hal_play_log_count = 0;
     g_busy             = false;
     g_sd_ok            = true;
+    g_dimmer_raw       = 2048;
     memset(g_alarm, 0, sizeof(g_alarm));
 }
 
-void hal_mock_set_busy(bool busy)              { g_busy = busy; }
-void hal_mock_set_sd_ok(bool ok)               { g_sd_ok = ok; }
-void hal_mock_set_alarm(uint8_t ch, bool val)  { if (ch < CHANNEL_COUNT) g_alarm[ch] = val; }
+void hal_mock_set_busy(bool busy)                  { g_busy = busy; }
+void hal_mock_set_sd_ok(bool ok)                   { g_sd_ok = ok; }
+void hal_mock_set_alarm(uint8_t ch, bool val)      { if (ch < CHANNEL_COUNT) g_alarm[ch] = val; }
+void hal_mock_set_dimmer_raw(uint16_t val)         { g_dimmer_raw = val; }
 
 void hal_set_led_duty(hal_led_t led, uint16_t duty) { hal_led_duty[led] = duty; }
 
@@ -41,5 +44,5 @@ void     hal_init(void)                            {}
 uint32_t hal_millis(void)                          { return 0; }
 bool     hal_read_alarm(uint8_t ch)                { return (ch < CHANNEL_COUNT) ? g_alarm[ch] : false; }
 bool     hal_read_button(void)                     { return false; }
-uint16_t hal_read_dimmer_raw(void)                 { return 0; }
+uint16_t hal_read_dimmer_raw(void)                 { return g_dimmer_raw; }
 void     hal_log_write(const uint8_t *b, size_t n) { (void)b; (void)n; }

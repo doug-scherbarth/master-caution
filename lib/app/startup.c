@@ -13,22 +13,27 @@ typedef enum {
     SS_GREEN,
     SS_BLUE,
     SS_WHITE,
-    SS_CH_FAULT,   // blue flash: one or more inputs asserted at rest
+    SS_CH_FAULT,      // blue 4 Hz/3 s: input asserted at rest
+    SS_DIMMER_WARN,   // amber 2 Hz/2 s: dimmer ADC pegged at rail
     SS_TONE_LO,
     SS_TONE_MID,
     SS_TONE_HI,
-    SS_SD_ERROR,   // red flash: SD card or 0.WAV not found
+    SS_SD_ERROR,      // red 5 Hz/5 s: SD card or 0.WAV not found
     SS_ACK_WAIT,
     SS_DONE,
 } ss_state_t;
 
-#define LED_STEP_MS           500u
-#define WHITE_STEP_MS         400u
-#define CH_FAULT_FLASH_HALF_MS 125u  // 4 Hz blue channel-fault flash
+#define LED_STEP_MS            500u
+#define WHITE_STEP_MS          400u
+#define CH_FAULT_FLASH_HALF_MS 125u   // 4 Hz blue channel-fault flash
 #define CH_FAULT_DURATION_MS  3000u
-#define SD_ERR_FLASH_HALF_MS  100u   // 5 Hz red SD-error flash
+#define DIMMER_WARN_HALF_MS    250u   // 2 Hz amber dimmer-fault flash
+#define DIMMER_WARN_DURATION_MS 2000u
+#define DIMMER_LOW_LIMIT        100u  // ADC counts; below → open/shorted wiper
+#define DIMMER_HIGH_LIMIT      3995u
+#define SD_ERR_FLASH_HALF_MS   100u   // 5 Hz red SD-error flash
 #define SD_ERR_DURATION_MS    5000u
-#define FLASH_HALF_MS         250u   // 2 Hz green ACK flash
+#define FLASH_HALF_MS          250u   // 2 Hz green ACK flash
 
 static ss_state_t g_state;
 static uint32_t   g_phase_start;
@@ -36,6 +41,7 @@ static uint32_t   g_flash_last;
 static bool       g_flash_on;
 static bool       g_sd_ok;
 static bool       g_ch_fault;
+static bool       g_dimmer_warn;
 
 static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_RED,   r);
@@ -67,6 +73,12 @@ static void enter(ss_state_t s, uint32_t now_ms) {
         g_phase_start = now_ms;
         rgb(0, 0, 4095);
         break;
+    case SS_DIMMER_WARN:
+        g_flash_on    = true;
+        g_flash_last  = now_ms;
+        g_phase_start = now_ms;
+        rgb(4095, 4095, 0);   // amber
+        break;
     case SS_TONE_LO:  rgb(0, 0, 0); hal_audio_play(WAV_TONE_LO);  break;
     case SS_TONE_MID:               hal_audio_play(WAV_TONE_MID); break;
     case SS_TONE_HI:                hal_audio_play(WAV_TONE_HI);  break;
@@ -89,11 +101,17 @@ static void enter(ss_state_t s, uint32_t now_ms) {
     }
 }
 
+// Next state after dimmer warn (or if no dimmer warn): SD error or tones.
+static ss_state_t after_dimmer(void) {
+    return g_sd_ok ? SS_TONE_LO : SS_SD_ERROR;
+}
+
 void startup_init(uint32_t now_ms) {
-    g_flash_on   = false;
-    g_flash_last = 0;
-    g_sd_ok      = hal_audio_sd_ok();
-    g_ch_fault   = false;
+    g_flash_on    = false;
+    g_flash_last  = 0;
+    g_sd_ok       = hal_audio_sd_ok();
+    g_ch_fault    = false;
+    g_dimmer_warn = false;
     enter(SS_RED, now_ms);
 }
 
@@ -111,9 +129,11 @@ void startup_tick(uint32_t now_ms) {
     case SS_WHITE:
         if ((uint32_t)(now_ms - g_phase_start) >= WHITE_STEP_MS) {
             g_ch_fault = any_channel_faulted();
-            if (g_ch_fault)  enter(SS_CH_FAULT, now_ms);
-            else if (!g_sd_ok) enter(SS_SD_ERROR, now_ms);
-            else               enter(SS_TONE_LO,  now_ms);
+            uint16_t dim = hal_read_dimmer_raw();
+            g_dimmer_warn = (dim < DIMMER_LOW_LIMIT || dim > DIMMER_HIGH_LIMIT);
+            if      (g_ch_fault)    enter(SS_CH_FAULT,    now_ms);
+            else if (g_dimmer_warn) enter(SS_DIMMER_WARN, now_ms);
+            else                    enter(after_dimmer(),  now_ms);
         }
         break;
     case SS_CH_FAULT:
@@ -123,7 +143,17 @@ void startup_tick(uint32_t now_ms) {
             hal_set_led_duty(HAL_LED_BLUE, g_flash_on ? 4095 : 0);
         }
         if ((uint32_t)(now_ms - g_phase_start) >= CH_FAULT_DURATION_MS)
-            enter(g_sd_ok ? SS_TONE_LO : SS_SD_ERROR, now_ms);
+            enter(g_dimmer_warn ? SS_DIMMER_WARN : after_dimmer(), now_ms);
+        break;
+    case SS_DIMMER_WARN:
+        if ((uint32_t)(now_ms - g_flash_last) >= DIMMER_WARN_HALF_MS) {
+            g_flash_on   = !g_flash_on;
+            g_flash_last = now_ms;
+            hal_set_led_duty(HAL_LED_RED,   g_flash_on ? 4095 : 0);
+            hal_set_led_duty(HAL_LED_GREEN, g_flash_on ? 4095 : 0);
+        }
+        if ((uint32_t)(now_ms - g_phase_start) >= DIMMER_WARN_DURATION_MS)
+            enter(after_dimmer(), now_ms);
         break;
     case SS_TONE_LO:  if (!hal_audio_busy()) enter(SS_TONE_MID, now_ms); break;
     case SS_TONE_MID: if (!hal_audio_busy()) enter(SS_TONE_HI,  now_ms); break;
