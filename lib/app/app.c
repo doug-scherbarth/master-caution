@@ -11,6 +11,8 @@
 #include "led_controller.h"
 #include "aux_led.h"
 #include "ring_log.h"
+#include "startup.h"
+#include "test_mode.h"
 #include "channel_table.h"
 #include "hal.h"
 
@@ -27,6 +29,8 @@ void app_init(void) {
     led_controller_init();
     aux_led_init();
     ring_log_init();
+    test_mode_init();
+    startup_init(hal_millis());
 }
 
 void app_tick(void) {
@@ -38,25 +42,33 @@ void app_tick(void) {
     debouncer_tick(now, g_raw_ch, g_deb_ch);
 
     button_tick(now, hal_read_button());
-    if (button_consume_press()) {
-        alarm_engine_on_button_press(now);
-    }
+    bool pressed      = button_consume_press();
+    bool long_pressed = button_consume_long_press();
 
     dimmer_tick(now, hal_read_dimmer_raw());
     hal_set_led_duty(HAL_LED_AUX, aux_led_compute_duty(dimmer_get_norm_q12()));
 
-    alarm_engine_tick(now, g_deb_ch);
-    audio_queue_tick(now);
+    if (startup_active()) {
+        if (pressed) startup_on_button_press(now);
+        startup_tick(now);
+    } else if (test_mode_active()) {
+        test_mode_tick(now);
+    } else {
+        if (pressed)      alarm_engine_on_button_press(now);
+        if (long_pressed) test_mode_trigger(now);
+        alarm_engine_tick(now, g_deb_ch);
+        audio_queue_tick(now);
 
-    led_drive_t drive;
-    led_controller_tick(now,
-                        alarm_engine_max_active_severity(),
-                        alarm_engine_any_pending_ack(),
-                        dimmer_get_norm_q12(),
-                        &drive);
-    hal_set_led_duty(HAL_LED_RED,   drive.red);
-    hal_set_led_duty(HAL_LED_GREEN, drive.green);
-    hal_set_led_duty(HAL_LED_BLUE,  drive.blue);
+        led_drive_t drive;
+        led_controller_tick(now,
+                            alarm_engine_max_active_severity(),
+                            alarm_engine_any_pending_ack(),
+                            dimmer_get_norm_q12(),
+                            &drive);
+        hal_set_led_duty(HAL_LED_RED,   drive.red);
+        hal_set_led_duty(HAL_LED_GREEN, drive.green);
+        hal_set_led_duty(HAL_LED_BLUE,  drive.blue);
+    }
 
     ring_log_tick();
 }

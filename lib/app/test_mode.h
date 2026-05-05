@@ -1,9 +1,10 @@
 // lib/app/test_mode.h
 //
 // Hardware self-test sequence: RED → GREEN → BLUE, then three ascending tones.
-// Triggered by a qualified button press. Drives LEDs and audio directly via
-// HAL, bypassing the normal led_controller and audio_queue. Caller must hold
-// off those subsystems while test_mode_active() returns true.
+// Triggered by a 3-second long press. Drives LEDs and audio directly via HAL,
+// bypassing the normal led_controller and audio_queue.
+//
+// TODO: evaluate removing once startup sequence provides equivalent coverage.
 //
 // Reserved wav IDs for the three test tones (above WAV_COUNT=13):
 #ifndef TEST_MODE_H

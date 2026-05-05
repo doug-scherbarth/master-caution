@@ -32,3 +32,4 @@ uint16_t hal_read_dimmer_raw(void)                     { return 0; }
 void     hal_set_led_duty(hal_led_t l, uint16_t d)     { (void)l; (void)d; }
 void     hal_audio_play(uint8_t w)                     { (void)w; }
 bool     hal_audio_busy(void)                          { return false; }
+bool     hal_audio_sd_ok(void)                         { return true;  }

@@ -14,6 +14,7 @@
 #include <SD.h>
 #include "audio_glue.h"
 
+static bool             g_sd_ok = false;
 static AudioPlaySdWav   g_player;
 static AudioAmplifier   g_amp_l;
 static AudioAmplifier   g_amp_r;
@@ -29,7 +30,11 @@ void audio_glue_init(void) {
     AudioMemory(24);
     g_amp_l.gain(OUTPUT_GAIN);
     g_amp_r.gain(OUTPUT_GAIN);
-    SD.begin(BUILTIN_SDCARD);
+    if (SD.begin(BUILTIN_SDCARD)) {
+        File f = SD.open("0.WAV");
+        g_sd_ok = (bool)f;
+        if (f) f.close();
+    }
 }
 
 void audio_glue_play(uint8_t wav_id) {
@@ -38,6 +43,5 @@ void audio_glue_play(uint8_t wav_id) {
     g_player.play(name);
 }
 
-bool audio_glue_busy(void) {
-    return g_player.isPlaying();
-}
+bool audio_glue_busy(void) { return g_player.isPlaying(); }
+bool audio_glue_sd_ok(void) { return g_sd_ok; }

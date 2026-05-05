@@ -63,7 +63,7 @@ void ring_log_tick(void) {
     int n = snprintf(line, sizeof(line), "[%lu] %s %s\n",
                      (unsigned long)r->ts_ms, name, event_name(r->event));
     if (n > 0) {
-        if (n > (int)sizeof(line)) n = (int)sizeof(line);
+        if (n > (int)(sizeof(line) - 1)) n = (int)(sizeof(line) - 1);
         hal_log_write((const uint8_t *)line, (size_t)n);
     }
     g_tail = (uint8_t)(g_tail + 1) & RING_LOG_MASK;

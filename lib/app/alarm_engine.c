@@ -7,7 +7,8 @@
 static alarm_runtime_t g_rt[ALARM_COUNT_MAX];
 
 static bool eval_alarm(const alarm_descriptor_t *a, const bool *ch) {
-    return (a->kind == SRC_DIRECT) ? ch[a->channel] : a->composite(ch);
+    if (a->kind == SRC_DIRECT) return ch[a->channel];
+    return (a->composite != NULL) && a->composite(ch);
 }
 
 static void enter_state(uint8_t i, alarm_state_t s, uint32_t now_ms) {

@@ -38,6 +38,7 @@ void hal_audio_play(uint8_t wav_id) {
 }
 
 bool hal_audio_busy(void) { return g_busy; }
+bool hal_audio_sd_ok(void) { return true; }
 
 // Stubs for everything else the linker may pull in. None are used by
 // audio_queue, but keep them here so the mock is self-contained.

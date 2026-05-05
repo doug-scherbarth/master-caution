@@ -41,6 +41,7 @@ uint16_t hal_read_dimmer_raw(void);          // 0..4095, 12-bit ADC
 void     hal_set_led_duty(hal_led_t led, uint16_t duty);  // 0..4095, 12-bit PWM
 void     hal_audio_play(uint8_t wav_id);
 bool     hal_audio_busy(void);
+bool     hal_audio_sd_ok(void);    // true if SD card mounted and 0.WAV readable
 
 // Logging — bytes go straight to USB serial on target, stdout on host
 void     hal_log_write(const uint8_t *buf, size_t n);

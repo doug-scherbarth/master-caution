@@ -13,6 +13,7 @@ extern "C" {
 void audio_glue_init(void);
 void audio_glue_play(uint8_t wav_id);
 bool audio_glue_busy(void);
+bool audio_glue_sd_ok(void);
 
 #ifdef __cplusplus
 }

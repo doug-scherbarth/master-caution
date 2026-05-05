@@ -94,9 +94,8 @@ void hal_audio_play(uint8_t wav_id) {
     audio_glue_play(wav_id);
 }
 
-bool hal_audio_busy(void) {
-    return audio_glue_busy();
-}
+bool hal_audio_busy(void)  { return audio_glue_busy();  }
+bool hal_audio_sd_ok(void) { return audio_glue_sd_ok(); }
 
 void hal_log_write(const uint8_t *buf, size_t n) {
     Serial.write(buf, n);
