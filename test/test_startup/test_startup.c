@@ -4,6 +4,7 @@
 
 #include <unity.h>
 #include "startup.h"
+#include "channel_table.h"
 #include "hal.h"
 
 extern uint16_t hal_led_duty[4];
@@ -13,6 +14,7 @@ extern int      hal_play_log_count;
 void hal_mock_reset(void);
 void hal_mock_set_busy(bool busy);
 void hal_mock_set_sd_ok(bool ok);
+void hal_mock_set_alarm(uint8_t ch, bool val);
 
 #define RED   hal_led_duty[HAL_LED_RED]
 #define GREEN hal_led_duty[HAL_LED_GREEN]
@@ -171,6 +173,78 @@ void test_leds_off_after_ack(void) {
     TEST_ASSERT_EQUAL(0, BLUE);
 }
 
+// --- Channel at-rest check -----------------------------------------
+
+static void advance_to_white_end(void) {
+    startup_tick(LED_MS);
+    startup_tick(LED_MS * 2);
+    startup_tick(LED_MS * 3);
+    startup_tick(LED_MS * 3 + WHITE_MS);
+}
+
+void test_clean_channels_proceed_to_tones(void) {
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(0, hal_led_duty[HAL_LED_BLUE]);  // no fault, no blue flash
+    TEST_ASSERT_EQUAL(1, hal_play_calls);               // TONE_LO started
+}
+
+void test_faulted_channel_triggers_blue_flash(void) {
+    hal_mock_set_alarm(CH_CO_DETECT, true);
+    startup_init(0);
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(4095, hal_led_duty[HAL_LED_BLUE]);
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);   // tones not yet started
+}
+
+void test_oil_pressure_excluded_from_check(void) {
+    hal_mock_set_alarm(CH_OIL_PRESS_LOW, true);
+    startup_init(0);
+    advance_to_white_end();
+    // Oil pressure excluded → no blue flash, proceeds to tones
+    TEST_ASSERT_EQUAL(0, hal_led_duty[HAL_LED_BLUE]);
+    TEST_ASSERT_EQUAL(1, hal_play_calls);
+}
+
+void test_spare_channel_excluded_from_check(void) {
+    hal_mock_set_alarm(CH_SPARE, true);
+    startup_init(0);
+    advance_to_white_end();
+    TEST_ASSERT_EQUAL(0, hal_led_duty[HAL_LED_BLUE]);
+    TEST_ASSERT_EQUAL(1, hal_play_calls);
+}
+
+void test_ch_fault_blue_toggles_at_4hz(void) {
+    hal_mock_set_alarm(CH_CO_DETECT, true);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + 125);    // one half-period → off
+    TEST_ASSERT_EQUAL(0,    hal_led_duty[HAL_LED_BLUE]);
+    startup_tick(t + 250);    // another → on
+    TEST_ASSERT_EQUAL(4095, hal_led_duty[HAL_LED_BLUE]);
+}
+
+void test_ch_fault_proceeds_to_tones_after_3s(void) {
+    hal_mock_set_alarm(CH_CO_DETECT, true);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + 3000);   // 3s elapsed → SS_TONE_LO
+    TEST_ASSERT_EQUAL(1, hal_play_calls);
+    TEST_ASSERT_EQUAL(0, hal_led_duty[HAL_LED_BLUE]);
+}
+
+void test_ch_fault_then_sd_error(void) {
+    hal_mock_set_alarm(CH_CO_DETECT, true);
+    hal_mock_set_sd_ok(false);
+    startup_init(0);
+    advance_to_white_end();
+    uint32_t t = LED_MS * 3 + WHITE_MS;
+    startup_tick(t + 3000);   // CH_FAULT done → SS_SD_ERROR
+    TEST_ASSERT_EQUAL(0,    hal_play_calls);   // no tones
+    TEST_ASSERT_EQUAL(4095, hal_led_duty[HAL_LED_RED]);
+}
+
 // --- SD error path -------------------------------------------------
 
 static void advance_to_after_white(void) {
@@ -242,6 +316,13 @@ int main(void) {
     RUN_TEST(test_button_press_before_ack_wait_ignored);
     RUN_TEST(test_button_press_in_ack_wait_completes_startup);
     RUN_TEST(test_leds_off_after_ack);
+    RUN_TEST(test_clean_channels_proceed_to_tones);
+    RUN_TEST(test_faulted_channel_triggers_blue_flash);
+    RUN_TEST(test_oil_pressure_excluded_from_check);
+    RUN_TEST(test_spare_channel_excluded_from_check);
+    RUN_TEST(test_ch_fault_blue_toggles_at_4hz);
+    RUN_TEST(test_ch_fault_proceeds_to_tones_after_3s);
+    RUN_TEST(test_ch_fault_then_sd_error);
     RUN_TEST(test_sd_error_skips_tones_and_fast_flashes_red);
     RUN_TEST(test_sd_error_red_toggles_at_5hz);
     RUN_TEST(test_sd_error_transitions_to_ack_wait_after_5s);
