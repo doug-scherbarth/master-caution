@@ -1,13 +1,13 @@
 // lib/app/dimmer.h
 //
-// Panel dimmer pot tracking (spec §2.2, §6.4, §4.7).
+// Panel dimmer tracking (spec v1.4 §6.3).
 //
-// Inputs raw 12-bit ADC samples, IIR-filters, normalizes to Q12 (0..4095),
-// and applies the §4.7 software fail-safe (50% if raw stuck at 0 for >5s).
+// Accepts raw 12-bit ADC samples for DIM_IN and BUS_SENSE, computes the
+// ratiometric Q12 value (dim_raw * 4096 / bus_raw), IIR-filters it, and
+// normalises to Q12 brightness with end dead bands.
 //
-// The module does NOT call HAL — the caller passes raw ADC values to
-// dimmer_tick(). This keeps the unit under test pure and matches the
-// alarm_engine/debouncer pattern.
+// The module does NOT call HAL — the caller passes raw ADC values so the
+// unit under test remains pure.
 
 #ifndef DIMMER_H
 #define DIMMER_H
@@ -16,18 +16,17 @@
 
 void dimmer_init(void);
 
-// Process one ADC sample. Internally rate-limited to ~50 Hz; calls within
-// the rate-limit window return without updating state. raw is the 12-bit
-// ADC reading (0..4095).
-void dimmer_tick(uint32_t now_ms, uint16_t raw);
+// Process one pair of ADC samples (50 Hz rate-limited internally).
+// dim_raw:  DIM_IN channel,  0..4095.
+// bus_raw:  BUS_SENSE channel, 0..4095. If 0 the ratio is treated as 0.
+void dimmer_tick(uint32_t now_ms, uint16_t dim_raw, uint16_t bus_raw);
 
-// Normalized brightness in Q12 (0 = full dim, 4095 = full bright).
+// Normalised brightness in Q12 (0 = full dim, 4095 = full bright).
 // Returns 2048 (50%) when the soft fail-safe is active.
 uint16_t dimmer_get_norm_q12(void);
 
-// True if raw has been stuck near 0 long enough to trigger the §4.7
-// soft fail-safe. The hardware pull-up fail-safe (broken wire → ~72%)
-// is invisible to firmware — it just looks like a normal reading.
+// True if the ratio has been stuck near 0 long enough to trigger the
+// soft fail-safe (broken dimmer wire → hold at 50%).
 bool dimmer_failsafe_active(void);
 
 #endif // DIMMER_H

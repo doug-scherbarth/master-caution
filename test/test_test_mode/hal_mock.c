@@ -40,5 +40,5 @@ void hal_init(void)                                {}
 uint32_t hal_millis(void)                          { return 0; }
 bool hal_read_alarm(uint8_t ch)                    { (void)ch; return false; }
 bool hal_read_button(void)                         { return false; }
-uint16_t hal_read_dimmer_raw(void)                 { return 0; }
+uint16_t hal_adc_read(hal_adc_ch_t ch)             { (void)ch; return 0; }
 void hal_log_write(const uint8_t *b, size_t n)    { (void)b; (void)n; }

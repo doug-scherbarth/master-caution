@@ -16,5 +16,4 @@ const channel_descriptor_t CHANNEL_TABLE[CHANNEL_COUNT] = {
     [CH_FLAPS_DEPLOYED]    = { "FLAPS_DEPLOYED",    250 },  // mech switch — faster
     [CH_AIRSPEED_OVER_VFE] = { "AIRSPEED_OVER_VFE", 500 },
     [CH_BOOST_PUMP_ON]     = { "BOOST_PUMP_ON",     500 },
-    [CH_SPARE]             = { "SPARE",             500 },
 };

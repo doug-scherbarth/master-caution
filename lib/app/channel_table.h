@@ -1,7 +1,8 @@
 // lib/app/channel_table.h
 //
-// 15 physical input channels on DB-15 #1.
+// 14 physical input channels on DB-15 #1 (v1.4).
 // Indices match the connector pin number minus 1 (ch 0 = pin 1).
+// Pin 15 (formerly CH_SPARE) is now DIM_IN — see §2 of spec v1.4.
 // All channels are active-low at the connector; HAL inverts.
 
 #ifndef CHANNEL_TABLE_H
@@ -24,7 +25,6 @@ enum channel_id {
     CH_FLAPS_DEPLOYED     = 11,
     CH_AIRSPEED_OVER_VFE  = 12,
     CH_BOOST_PUMP_ON      = 13,
-    CH_SPARE              = 14,
 };
 
 typedef struct {

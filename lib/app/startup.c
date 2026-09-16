@@ -50,11 +50,10 @@ static void rgb(uint16_t r, uint16_t g, uint16_t b) {
 }
 
 // Returns true if any non-excluded channel is asserted at startup.
-// CH_OIL_PRESS_LOW: expected asserted on ground (no engine).
-// CH_SPARE:         unconnected — ignore whatever it reads.
+// CH_OIL_PRESS_LOW: expected asserted on ground before engine start.
 static bool any_channel_faulted(void) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        if (i == CH_OIL_PRESS_LOW || i == CH_SPARE) continue;
+        if (i == CH_OIL_PRESS_LOW) continue;
         if (hal_read_alarm(i)) return true;
     }
     return false;
@@ -129,8 +128,11 @@ void startup_tick(uint32_t now_ms) {
     case SS_WHITE:
         if ((uint32_t)(now_ms - g_phase_start) >= WHITE_STEP_MS) {
             g_ch_fault = any_channel_faulted();
-            uint16_t dim = hal_read_dimmer_raw();
-            g_dimmer_warn = (dim < DIMMER_LOW_LIMIT || dim > DIMMER_HIGH_LIMIT);
+            uint16_t dim_raw = hal_adc_read(HAL_ADC_DIM_IN);
+            uint16_t bus_raw = hal_adc_read(HAL_ADC_BUS_SENSE);
+            uint32_t ratio32 = (bus_raw > 0u) ? ((uint32_t)dim_raw * 4096u / bus_raw) : 0u;
+            uint16_t ratio   = (ratio32 > 4095u) ? 4095u : (uint16_t)ratio32;
+            g_dimmer_warn = (ratio < DIMMER_LOW_LIMIT || ratio > DIMMER_HIGH_LIMIT);
             if      (g_ch_fault)    enter(SS_CH_FAULT,    now_ms);
             else if (g_dimmer_warn) enter(SS_DIMMER_WARN, now_ms);
             else                    enter(after_dimmer(),  now_ms);

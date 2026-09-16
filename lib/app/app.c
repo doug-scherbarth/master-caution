@@ -45,7 +45,8 @@ void app_tick(void) {
     bool pressed      = button_consume_press();
     bool long_pressed = button_consume_long_press();
 
-    dimmer_tick(now, hal_read_dimmer_raw());
+    dimmer_tick(now, hal_adc_read(HAL_ADC_DIM_IN), hal_adc_read(HAL_ADC_BUS_SENSE));
+    // HAL_LED_AUX is not wired on the v1.4 board; hal_set_led_duty is a no-op for it.
     hal_set_led_duty(HAL_LED_AUX, aux_led_compute_duty(dimmer_get_norm_q12()));
 
     if (startup_active()) {

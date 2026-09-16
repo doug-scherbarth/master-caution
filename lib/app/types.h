@@ -14,7 +14,7 @@ typedef enum {
     SEV_HIGH = 3,
 } severity_t;
 
-#define CHANNEL_COUNT     15
+#define CHANNEL_COUNT     14
 #define ALARM_COUNT_MAX   16    // sized to allow growth past the 13 baseline
 
 #endif // TYPES_H

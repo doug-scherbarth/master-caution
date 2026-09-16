@@ -15,7 +15,7 @@ void hal_mock_reset(void);
 void hal_mock_set_busy(bool busy);
 void hal_mock_set_sd_ok(bool ok);
 void hal_mock_set_alarm(uint8_t ch, bool val);
-void hal_mock_set_dimmer_raw(uint16_t val);
+void hal_mock_set_adc(hal_adc_ch_t ch, uint16_t val);
 
 #define RED   hal_led_duty[HAL_LED_RED]
 #define GREEN hal_led_duty[HAL_LED_GREEN]
@@ -208,13 +208,6 @@ void test_oil_pressure_excluded_from_check(void) {
     TEST_ASSERT_EQUAL(1, hal_play_calls);
 }
 
-void test_spare_channel_excluded_from_check(void) {
-    hal_mock_set_alarm(CH_SPARE, true);
-    startup_init(0);
-    advance_to_white_end();
-    TEST_ASSERT_EQUAL(0, hal_led_duty[HAL_LED_BLUE]);
-    TEST_ASSERT_EQUAL(1, hal_play_calls);
-}
 
 void test_ch_fault_blue_toggles_at_4hz(void) {
     hal_mock_set_alarm(CH_CO_DETECT, true);
@@ -259,7 +252,7 @@ void test_mid_range_dimmer_no_warn(void) {
 }
 
 void test_dimmer_low_triggers_amber(void) {
-    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
     startup_init(0);
     advance_to_white_end();
     TEST_ASSERT_EQUAL(4095, RED);
@@ -269,7 +262,7 @@ void test_dimmer_low_triggers_amber(void) {
 }
 
 void test_dimmer_high_triggers_amber(void) {
-    hal_mock_set_dimmer_raw(4000);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 3100);  // ratio=4133 clamped to 4095 > 3995 → flagged
     startup_init(0);
     advance_to_white_end();
     TEST_ASSERT_EQUAL(4095, RED);
@@ -279,7 +272,7 @@ void test_dimmer_high_triggers_amber(void) {
 }
 
 void test_dimmer_warn_amber_toggles_at_2hz(void) {
-    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
     startup_init(0);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
@@ -292,7 +285,7 @@ void test_dimmer_warn_amber_toggles_at_2hz(void) {
 }
 
 void test_dimmer_warn_proceeds_to_tones_after_2s(void) {
-    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
     startup_init(0);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
@@ -303,7 +296,7 @@ void test_dimmer_warn_proceeds_to_tones_after_2s(void) {
 }
 
 void test_dimmer_warn_then_sd_error(void) {
-    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
     hal_mock_set_sd_ok(false);
     startup_init(0);
     advance_to_white_end();
@@ -316,7 +309,7 @@ void test_dimmer_warn_then_sd_error(void) {
 
 void test_ch_fault_then_dimmer_warn(void) {
     hal_mock_set_alarm(CH_CO_DETECT, true);
-    hal_mock_set_dimmer_raw(50);
+    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
     startup_init(0);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
@@ -401,7 +394,7 @@ int main(void) {
     RUN_TEST(test_clean_channels_proceed_to_tones);
     RUN_TEST(test_faulted_channel_triggers_blue_flash);
     RUN_TEST(test_oil_pressure_excluded_from_check);
-    RUN_TEST(test_spare_channel_excluded_from_check);
+
     RUN_TEST(test_ch_fault_blue_toggles_at_4hz);
     RUN_TEST(test_ch_fault_proceeds_to_tones_after_3s);
     RUN_TEST(test_ch_fault_then_sd_error);
