@@ -1,6 +1,5 @@
 // lib/app/debouncer.c
 #include "debouncer.h"
-#include "channel_table.h"
 
 typedef struct {
     bool     debounced;              // stable output
@@ -9,12 +8,14 @@ typedef struct {
 } dbnc_state_t;
 
 static dbnc_state_t g_ch[CHANNEL_COUNT];
+static uint16_t     g_dbnc_ms[CHANNEL_COUNT];
 
-void debouncer_init(void) {
+void debouncer_init(const uint16_t *debounce_ms) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
         g_ch[i].debounced             = false;
         g_ch[i].in_transition         = false;
         g_ch[i].transition_started_ms = 0;
+        g_dbnc_ms[i]                  = debounce_ms[i];
     }
 }
 
@@ -31,7 +32,7 @@ void debouncer_tick(uint32_t now_ms, const bool *raw, bool *out) {
             s->in_transition         = true;
             s->transition_started_ms = now_ms;
         } else if ((uint32_t)(now_ms - s->transition_started_ms)
-                   >= CHANNEL_TABLE[i].debounce_ms) {
+                   >= g_dbnc_ms[i]) {
             // Qualification time elapsed with input still different — accept the new state.
             s->debounced     = r;
             s->in_transition = false;

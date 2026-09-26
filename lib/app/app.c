@@ -18,16 +18,27 @@
 #include "pixel_lighting.h"
 #include "dimmer_gesture.h"
 #include "eeprom_map.h"
+#include "channel_cfg.h"
 #include "hal.h"
 
-static bool        g_raw_ch[CHANNEL_COUNT];
-static bool        g_deb_ch[CHANNEL_COUNT];
-static light_cfg_t g_light_cfg;
-static bool        g_pg_ok = false; // track PG edge; starts false so first tick captures baseline
+static bool           g_raw_ch[CHANNEL_COUNT];
+static bool           g_deb_ch[CHANNEL_COUNT];
+static light_cfg_t    g_light_cfg;
+static channel_cfg_t  g_channel_cfg;
+static bool           g_pg_ok = false; // track PG edge; starts false so first tick captures baseline
 
 void app_init(void) {
     hal_init();
-    debouncer_init();
+
+    // Load per-channel config from SD (fallback on failure).
+    channel_cfg_load(&g_channel_cfg);
+
+    // Build debounce array from loaded config and pass to debouncer.
+    uint16_t dbnc_ms[CHANNEL_COUNT];
+    for (uint8_t i = 0; i < CHANNEL_COUNT; i++)
+        dbnc_ms[i] = g_channel_cfg.ch[i].debounce_ms;
+    debouncer_init(dbnc_ms);
+
     alarm_engine_init();
     audio_queue_init();
     button_init();
@@ -36,7 +47,7 @@ void app_init(void) {
     aux_led_init();
     ring_log_init();
     test_mode_init();
-    startup_init(hal_millis());
+    startup_init(hal_millis(), &g_channel_cfg);
 
     // Lighting: load config from SD (or fall back to built-in), restore
     // saved config index from EEPROM, enable buck regulator.
@@ -47,13 +58,17 @@ void app_init(void) {
                         g_light_cfg.gesture_high_pct,
                         g_light_cfg.gesture_timeout_ms);
     hal_lbuck_enable(true);
+
+    // Arm watchdog last — after all init is complete.
+    hal_watchdog_enable(2000);
 }
 
 void app_tick(void) {
+    hal_watchdog_kick();
     uint32_t now = hal_millis();
 
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        g_raw_ch[i] = hal_read_alarm(i);
+        g_raw_ch[i] = g_channel_cfg.ch[i].enabled ? hal_read_alarm(i) : false;
     }
     debouncer_tick(now, g_raw_ch, g_deb_ch);
 

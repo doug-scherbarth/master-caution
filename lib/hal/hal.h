@@ -68,6 +68,11 @@ bool     hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *o
 // Logging — bytes go straight to USB serial on target, stdout on host
 void     hal_log_write(const uint8_t *buf, size_t n);
 
+// Hardware watchdog — enable once at end of init, kick once per app_tick.
+// On target uses RTWDOG; on host the stubs are no-ops.
+void     hal_watchdog_enable(uint32_t timeout_ms);
+void     hal_watchdog_kick(void);
+
 #ifdef __cplusplus
 }
 #endif

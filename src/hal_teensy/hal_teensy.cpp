@@ -39,6 +39,7 @@
 #include <WS2812Serial.h>
 #include <EEPROM.h>
 #include <SD.h>
+#include <imxrt.h>
 #include "hal.h"
 #include "audio_glue.h"
 
@@ -160,4 +161,25 @@ bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_l
 
 void hal_log_write(const uint8_t *buf, size_t n) {
     Serial.write(buf, n);
+}
+
+void hal_watchdog_enable(uint32_t timeout_ms) {
+    // WDOG1 timeout = (WT + 1) * 0.5 s.  Clamp to [0.5 s, 128 s].
+    uint32_t half_secs = (timeout_ms + 499u) / 500u;
+    if (half_secs == 0) half_secs = 1;
+    if (half_secs > 256) half_secs = 256;
+    uint8_t wt = (uint8_t)(half_secs - 1u);
+
+    // Disable power-down counter (PDE bit) before touching WCR.
+    WDOG1_WMCR = 0;
+    // Enable watchdog: WDE | SRS (deasserted) | WDA (deasserted) | WT | WDZST.
+    // Once WDE is set it cannot be cleared without a reset.
+    WDOG1_WCR = WDOG_WCR_WDE | WDOG_WCR_SRS | WDOG_WCR_WDA
+              | WDOG_WCR_WT(wt) | WDOG_WCR_WDZST;
+}
+
+void hal_watchdog_kick(void) {
+    // Service sequence: write 0x5555 then 0xAAAA to WSR within one bus cycle.
+    WDOG1_WSR = 0x5555u;
+    WDOG1_WSR = 0xAAAAu;
 }

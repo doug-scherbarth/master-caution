@@ -1,6 +1,6 @@
 // lib/app/startup.c
 #include "startup.h"
-#include "channel_table.h"
+#include "channel_cfg.h"
 #include "hal.h"
 
 // Sine-tone WAV IDs on SD card: 13.WAV, 14.WAV, 15.WAV
@@ -39,9 +39,10 @@ static ss_state_t g_state;
 static uint32_t   g_phase_start;
 static uint32_t   g_flash_last;
 static bool       g_flash_on;
-static bool       g_sd_ok;
-static bool       g_ch_fault;
-static bool       g_dimmer_warn;
+static bool                  g_sd_ok;
+static bool                  g_ch_fault;
+static bool                  g_dimmer_warn;
+static const channel_cfg_t  *g_ch_cfg;
 
 static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_RED,   r);
@@ -49,11 +50,11 @@ static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_BLUE,  b);
 }
 
-// Returns true if any non-excluded channel is asserted at startup.
-// CH_OIL_PRESS_LOW: expected asserted on ground before engine start.
+// Returns true if any non-excluded, enabled channel is asserted at startup.
 static bool any_channel_faulted(void) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        if (i == CH_OIL_PRESS_LOW) continue;
+        if (g_ch_cfg && (g_ch_cfg->ch[i].startup_excluded || !g_ch_cfg->ch[i].enabled))
+            continue;
         if (hal_read_alarm(i)) return true;
     }
     return false;
@@ -105,7 +106,8 @@ static ss_state_t after_dimmer(void) {
     return g_sd_ok ? SS_TONE_LO : SS_SD_ERROR;
 }
 
-void startup_init(uint32_t now_ms) {
+void startup_init(uint32_t now_ms, const channel_cfg_t *cfg) {
+    g_ch_cfg      = cfg;
     g_flash_on    = false;
     g_flash_last  = 0;
     g_sd_ok       = hal_audio_sd_ok();

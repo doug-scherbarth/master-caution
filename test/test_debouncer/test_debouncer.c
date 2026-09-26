@@ -8,13 +8,15 @@
 #include "debouncer.h"
 #include "channel_table.h"
 
-static bool raw[CHANNEL_COUNT];
-static bool out[CHANNEL_COUNT];
+static bool     raw[CHANNEL_COUNT];
+static bool     out[CHANNEL_COUNT];
+static uint16_t s_dbnc[CHANNEL_COUNT];
 
 void setUp(void) {
     memset(raw, 0, sizeof(raw));
     memset(out, 0, sizeof(out));
-    debouncer_init();
+    for (int i = 0; i < CHANNEL_COUNT; i++) s_dbnc[i] = 500;
+    debouncer_init(s_dbnc);
 }
 
 void tearDown(void) {}
@@ -96,7 +98,9 @@ void test_chatter_resets_qualification_timer(void) {
 // --- Per-channel timing ----------------------------------------------
 
 void test_per_channel_timing_flaps_qualifies_first(void) {
-    // FLAPS_DEPLOYED debounce = 250ms; CO_DETECT = 500ms
+    // Override FLAPS_DEPLOYED to 250ms; CO_DETECT stays at 500ms from setUp.
+    s_dbnc[CH_FLAPS_DEPLOYED] = 250;
+    debouncer_init(s_dbnc);
     raw[CH_FLAPS_DEPLOYED] = true;
     raw[CH_CO_DETECT]      = true;
 

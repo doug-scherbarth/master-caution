@@ -49,3 +49,6 @@ void     hal_lbuck_enable(bool en)                                           { (
 bool     hal_lbuck_pg(void)                                                  { return true; }
 uint8_t  hal_eeprom_get(uint16_t addr)                                       { (void)addr; return 0; }
 void     hal_eeprom_put(uint16_t addr, uint8_t val)                          { (void)addr; (void)val; }
+
+void hal_watchdog_enable(uint32_t ms) { (void)ms; }
+void hal_watchdog_kick(void) {}
