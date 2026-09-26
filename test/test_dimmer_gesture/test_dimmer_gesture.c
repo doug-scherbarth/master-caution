@@ -5,14 +5,20 @@
 #include <unity.h>
 #include "dimmer_gesture.h"
 
-#define LOW   (DIM_GESTURE_LOW_THRESH)
-#define HIGH  (DIM_GESTURE_HIGH_THRESH)
-#define T_OUT (DIM_GESTURE_TIMEOUT_MS)
+// Test parameters — kept as percentages to match LIGHTS.CFG
+#define LOW_PCT   20u
+#define HIGH_PCT  80u
+#define T_OUT_MS  2000u
+
+// Threshold values in 0-255 ratio space (mirrors init conversion)
+#define LOW  ((uint8_t)(LOW_PCT  * 255u / 100u))   // 51
+#define HIGH ((uint8_t)(HIGH_PCT * 255u / 100u))   // 204
+#define T_OUT T_OUT_MS
 
 // Mid-range value safely inside the neutral zone
 #define MID 128u
 
-void setUp(void)    { dimmer_gesture_init(); }
+void setUp(void)    { dimmer_gesture_init(LOW_PCT, HIGH_PCT, T_OUT_MS); }
 void tearDown(void) {}
 
 // ---------------------------------------------------------------------------

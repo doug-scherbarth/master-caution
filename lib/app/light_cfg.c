@@ -51,10 +51,13 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
     memset(out, 0, sizeof(*out));
 
     // defaults
-    out->total_pixels   = LIGHT_MAX_PIXELS;
-    out->mA_per_channel = 20;
-    out->quiescent_mA   = 1;
-    out->max_current_mA = 2000;
+    out->total_pixels        = LIGHT_MAX_PIXELS;
+    out->mA_per_channel      = 20;
+    out->quiescent_mA        = 1;
+    out->max_current_mA      = 2000;
+    out->gesture_low_pct     = 20;
+    out->gesture_high_pct    = 80;
+    out->gesture_timeout_ms  = 2000;
     float gamma = 2.2f;
 
     typedef enum { SEC_NONE, SEC_GLOBAL, SEC_CONFIG } section_t;
@@ -119,11 +122,14 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
         while (*vp == ' ' || *vp == '\t') vp++;
 
         if (sec == SEC_GLOBAL) {
-            if      (strcmp(key, "total_pixels")   == 0) out->total_pixels    = (uint16_t)atoi(vp);
-            else if (strcmp(key, "ma_per_channel") == 0) out->mA_per_channel  = (uint16_t)atoi(vp);
-            else if (strcmp(key, "quiescent_ma")   == 0) out->quiescent_mA    = (uint16_t)atoi(vp);
-            else if (strcmp(key, "max_current_ma") == 0) out->max_current_mA  = (uint16_t)atoi(vp);
-            else if (strcmp(key, "gamma")          == 0) gamma = strtof(vp, NULL);
+            if      (strcmp(key, "total_pixels")        == 0) out->total_pixels       = (uint16_t)atoi(vp);
+            else if (strcmp(key, "ma_per_channel")      == 0) out->mA_per_channel     = (uint16_t)atoi(vp);
+            else if (strcmp(key, "quiescent_ma")        == 0) out->quiescent_mA       = (uint16_t)atoi(vp);
+            else if (strcmp(key, "max_current_ma")      == 0) out->max_current_mA     = (uint16_t)atoi(vp);
+            else if (strcmp(key, "gamma")               == 0) gamma = strtof(vp, NULL);
+            else if (strcmp(key, "gesture_low_pct")     == 0) out->gesture_low_pct    = (uint8_t)atoi(vp);
+            else if (strcmp(key, "gesture_high_pct")    == 0) out->gesture_high_pct   = (uint8_t)atoi(vp);
+            else if (strcmp(key, "gesture_timeout_ms")  == 0) out->gesture_timeout_ms = (uint16_t)atoi(vp);
         } else if (sec == SEC_CONFIG && cur_cfg) {
             if (strcmp(key, "start") == 0) {
                 // start= always begins a new segment
@@ -163,10 +169,13 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
 
 void light_cfg_fallback(light_cfg_t *out) {
     memset(out, 0, sizeof(*out));
-    out->total_pixels   = LIGHT_MAX_PIXELS;
-    out->mA_per_channel = 20;
-    out->quiescent_mA   = 1;
-    out->max_current_mA = 2000;
+    out->total_pixels        = LIGHT_MAX_PIXELS;
+    out->mA_per_channel      = 20;
+    out->quiescent_mA        = 1;
+    out->max_current_mA      = 2000;
+    out->gesture_low_pct     = 20;
+    out->gesture_high_pct    = 80;
+    out->gesture_timeout_ms  = 2000;
     build_gamma_lut(out->gamma_lut, 2.2f);
 
     out->n_configs = 1;

@@ -39,6 +39,10 @@ typedef struct {
     uint16_t       max_current_mA;
     // gamma_lut[i] = round(pow(i/255, gamma) * 255); built at parse time.
     uint8_t        gamma_lut[256];
+    // Dimmer gesture thresholds — tunable without recompiling.
+    uint8_t        gesture_low_pct;    // dip arms below this % of full range (0-100)
+    uint8_t        gesture_high_pct;   // bump arms above this % of full range (0-100)
+    uint16_t       gesture_timeout_ms; // ms to complete gesture before it cancels
     uint8_t        n_configs;
     light_config_t configs[LIGHT_MAX_CONFIGS];
 } light_cfg_t;

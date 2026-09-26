@@ -42,7 +42,9 @@ void app_init(void) {
     light_cfg_load(&g_light_cfg);
     uint8_t saved_idx = hal_eeprom_get(EEPROM_ADDR_LIGHT_CFG);
     pixel_lighting_init(&g_light_cfg, saved_idx);
-    dimmer_gesture_init();
+    dimmer_gesture_init(g_light_cfg.gesture_low_pct,
+                        g_light_cfg.gesture_high_pct,
+                        g_light_cfg.gesture_timeout_ms);
     hal_lbuck_enable(true);
 }
 

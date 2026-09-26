@@ -300,6 +300,42 @@ void test_load_falls_back_on_parse_error(void) {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Gesture fields
+// ---------------------------------------------------------------------------
+
+void test_parse_gesture_defaults(void) {
+    // Fields absent from [global] → defaults applied
+    light_cfg_t cfg;
+    light_cfg_parse(MINIMAL_CFG, &cfg);  // MINIMAL_CFG has no gesture keys
+    TEST_ASSERT_EQUAL_UINT8(20,   cfg.gesture_low_pct);
+    TEST_ASSERT_EQUAL_UINT8(80,   cfg.gesture_high_pct);
+    TEST_ASSERT_EQUAL_UINT16(2000, cfg.gesture_timeout_ms);
+}
+
+void test_parse_gesture_fields(void) {
+    const char *cfg_text =
+        "[global]\n"
+        "total_pixels = 4\n"
+        "gesture_low_pct    = 10\n"
+        "gesture_high_pct   = 90\n"
+        "gesture_timeout_ms = 1500\n"
+        "[config]\nname=x\nstart=0\ncount=4\nr=0\ng=0\nb=0\nscale=100\n";
+    light_cfg_t cfg;
+    light_cfg_parse(cfg_text, &cfg);
+    TEST_ASSERT_EQUAL_UINT8(10,   cfg.gesture_low_pct);
+    TEST_ASSERT_EQUAL_UINT8(90,   cfg.gesture_high_pct);
+    TEST_ASSERT_EQUAL_UINT16(1500, cfg.gesture_timeout_ms);
+}
+
+void test_fallback_gesture_defaults(void) {
+    light_cfg_t cfg;
+    light_cfg_fallback(&cfg);
+    TEST_ASSERT_EQUAL_UINT8(20,   cfg.gesture_low_pct);
+    TEST_ASSERT_EQUAL_UINT8(80,   cfg.gesture_high_pct);
+    TEST_ASSERT_EQUAL_UINT16(2000, cfg.gesture_timeout_ms);
+}
+
 // Parse: comments and blank lines ignored
 // ---------------------------------------------------------------------------
 
@@ -367,6 +403,9 @@ int main(void) {
     RUN_TEST(test_load_returns_false_on_sd_fail);
     RUN_TEST(test_load_succeeds_with_valid_file);
     RUN_TEST(test_load_falls_back_on_parse_error);
+    RUN_TEST(test_parse_gesture_defaults);
+    RUN_TEST(test_parse_gesture_fields);
+    RUN_TEST(test_fallback_gesture_defaults);
     RUN_TEST(test_parse_ignores_comments_and_blanks);
     RUN_TEST(test_parse_case_insensitive_keys);
 
