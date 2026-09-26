@@ -16,6 +16,7 @@
 #include "channel_table.h"
 #include "light_cfg.h"
 #include "pixel_lighting.h"
+#include "dimmer_gesture.h"
 #include "eeprom_map.h"
 #include "hal.h"
 
@@ -41,6 +42,7 @@ void app_init(void) {
     light_cfg_load(&g_light_cfg);
     uint8_t saved_idx = hal_eeprom_get(EEPROM_ADDR_LIGHT_CFG);
     pixel_lighting_init(&g_light_cfg, saved_idx);
+    dimmer_gesture_init();
     hal_lbuck_enable(true);
 }
 
@@ -83,5 +85,14 @@ void app_tick(void) {
     }
 
     ring_log_tick();
+
+    // Dimmer gesture: quick dip (<20%) or bump (>80%) advances lighting config
+    uint8_t dim_ratio = (uint8_t)(dimmer_get_norm_q12() >> 4);
+    if (dimmer_gesture_tick(now, dim_ratio)) {
+        uint8_t next = (uint8_t)((pixel_lighting_get_config() + 1u) % g_light_cfg.n_configs);
+        pixel_lighting_set_config(next);
+        hal_eeprom_put(EEPROM_ADDR_LIGHT_CFG, next);
+    }
+
     pixel_lighting_tick();
 }
