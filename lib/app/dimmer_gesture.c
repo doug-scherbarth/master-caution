@@ -51,6 +51,10 @@ bool dimmer_gesture_tick(uint32_t now_ms, uint8_t ratio) {
                 return true;
             }
             break;
+
+        default:
+            s_state = GS_IDLE;
+            break;
     }
     return false;
 }

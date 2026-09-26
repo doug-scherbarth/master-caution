@@ -79,8 +79,8 @@ static void enter(ss_state_t s, uint32_t now_ms) {
         rgb(4095, 4095, 0);   // amber
         break;
     case SS_TONE_LO:  rgb(0, 0, 0); hal_audio_play(WAV_TONE_LO);  break;
-    case SS_TONE_MID:               hal_audio_play(WAV_TONE_MID); break;
-    case SS_TONE_HI:                hal_audio_play(WAV_TONE_HI);  break;
+    case SS_TONE_MID: rgb(0, 0, 0); hal_audio_play(WAV_TONE_MID); break;
+    case SS_TONE_HI:  rgb(0, 0, 0); hal_audio_play(WAV_TONE_HI);  break;
     case SS_SD_ERROR:
         g_flash_on    = true;
         g_flash_last  = now_ms;

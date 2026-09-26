@@ -127,8 +127,8 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
             else if (strcmp(key, "quiescent_ma")        == 0) out->quiescent_mA       = (uint16_t)atoi(vp);
             else if (strcmp(key, "max_current_ma")      == 0) out->max_current_mA     = (uint16_t)atoi(vp);
             else if (strcmp(key, "gamma")               == 0) gamma = strtof(vp, NULL);
-            else if (strcmp(key, "gesture_low_pct")     == 0) out->gesture_low_pct    = (uint8_t)atoi(vp);
-            else if (strcmp(key, "gesture_high_pct")    == 0) out->gesture_high_pct   = (uint8_t)atoi(vp);
+            else if (strcmp(key, "gesture_low_pct")     == 0) { int v = atoi(vp); out->gesture_low_pct    = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
+            else if (strcmp(key, "gesture_high_pct")    == 0) { int v = atoi(vp); out->gesture_high_pct   = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
             else if (strcmp(key, "gesture_timeout_ms")  == 0) out->gesture_timeout_ms = (uint16_t)atoi(vp);
         } else if (sec == SEC_CONFIG && cur_cfg) {
             if (strcmp(key, "start") == 0) {

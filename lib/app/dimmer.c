@@ -41,7 +41,7 @@ void dimmer_tick(uint32_t now_ms, uint16_t dim_raw, uint16_t bus_raw) {
         ratio_q12  = (r > 4095u) ? 4095u : (uint16_t)r;
     }
 
-    // IIR α = 1/4: time constant ≈ 4 samples ≈ 80 ms at 50 Hz.
+    // IIR α = 1/4: time constant ≈ 3–4 samples ≈ 70 ms at 50 Hz.
     g_d.filtered_ratio =
         (uint16_t)(((uint32_t)g_d.filtered_ratio * 3u + ratio_q12 + 2u) / 4u);
 

@@ -32,8 +32,8 @@
 //   pin 20 = I2S LRCLK
 //   pin 21 = I2S BCLK
 //
-// WS2812 data → pin 29 (Serial7 TX) — not yet driven; pin left as input.
-// Lighting buck EN → pin 30, PG → pin 31 — not yet configured.
+// WS2812 data → pin 29 (Serial7 TX, DMA via WS2812Serial).
+// Lighting buck EN → pin 30 (N-FET, active-low to buck), PG → pin 31 (open-drain, INPUT_PULLDOWN).
 
 #include <Arduino.h>
 #include <WS2812Serial.h>
@@ -76,7 +76,7 @@ void hal_init(void) {
     // Lighting buck — keep disabled until config loaded (pin 30 HIGH = FET on = EN low = off)
     pinMode(30, OUTPUT);
     digitalWrite(30, HIGH);
-    pinMode(31, INPUT);   // PG — BAT54S clamp handles 5V tolerance
+    pinMode(31, INPUT_PULLDOWN);  // PG — open-drain; pull-down holds low when buck is off
 
     // Pixel chain
     s_pixels.begin();
@@ -150,6 +150,7 @@ void hal_eeprom_put(uint16_t addr, uint8_t val) {
 bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
     File f = SD.open(path);
     if (!f) return false;
+    if ((size_t)f.size() >= max_len) { f.close(); return false; }
     size_t n = f.read(buf, max_len - 1);
     f.close();
     buf[n] = '\0';

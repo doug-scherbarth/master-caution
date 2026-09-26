@@ -2,9 +2,10 @@
 //
 // Hardware abstraction layer for the master caution annunciator.
 //
-// All inputs are returned in POSITIVE LOGIC: the underlying signals are
-// active-low at the connector, but hal_read_alarm()/hal_read_button()
-// invert before returning. Application code never deals with polarity.
+// Alarm inputs are returned in POSITIVE LOGIC: connector signals are
+// active-high (INPUT_PULLDOWN, assert = HIGH), read directly by
+// hal_read_alarm(). The button is active-low and IS inverted by
+// hal_read_button(). Application code never deals with polarity.
 //
 // Two implementations:
 //   src/hal_teensy/  — real, talks to Teensy 4.1 + PCM5102 + SD card

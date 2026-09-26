@@ -23,7 +23,7 @@
 static bool        g_raw_ch[CHANNEL_COUNT];
 static bool        g_deb_ch[CHANNEL_COUNT];
 static light_cfg_t g_light_cfg;
-static bool        g_pg_ok = true;  // track PG edge for one-shot fault log
+static bool        g_pg_ok = false; // track PG edge; starts false so first tick captures baseline
 
 void app_init(void) {
     hal_init();
