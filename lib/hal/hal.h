@@ -48,6 +48,22 @@ void     hal_audio_play(uint8_t wav_id);
 bool     hal_audio_busy(void);
 bool     hal_audio_sd_ok(void);    // true if SD card mounted and 0.WAV readable
 
+// Pixel lighting — WS2812B chain on pin 29 via WS2812Serial
+// rgb_buf: n_pixels * 3 bytes, R/G/B order, one byte per channel 0..255
+void     hal_pixels_write(const uint8_t *rgb_buf, uint16_t n_pixels);
+
+// Lighting buck — Pololu D36V50F5 on pins 30 (EN) and 31 (PG)
+void     hal_lbuck_enable(bool en);
+bool     hal_lbuck_pg(void);       // true = power good
+
+// EEPROM emulation (Teensy internal)
+uint8_t  hal_eeprom_get(uint16_t addr);
+void     hal_eeprom_put(uint16_t addr, uint8_t val);
+
+// SD file read — returns true on success; out_len set to bytes read (excl. NUL)
+// buf is NUL-terminated on success. Fails silently if file > max_len-1 bytes.
+bool     hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len);
+
 // Logging — bytes go straight to USB serial on target, stdout on host
 void     hal_log_write(const uint8_t *buf, size_t n);
 

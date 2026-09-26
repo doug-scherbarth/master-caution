@@ -36,8 +36,17 @@
 // Lighting buck EN → pin 30, PG → pin 31 — not yet configured.
 
 #include <Arduino.h>
+#include <WS2812Serial.h>
+#include <EEPROM.h>
+#include <SD.h>
 #include "hal.h"
 #include "audio_glue.h"
+
+// --- Pixel chain (WS2812Serial, pin 29, DMA) ------------------------------
+#define PIXEL_MAX 150
+static byte         s_draw_mem[PIXEL_MAX * 3];
+DMAMEM static byte  s_disp_mem[PIXEL_MAX * 12];
+static WS2812Serial s_pixels(PIXEL_MAX, s_disp_mem, s_draw_mem, 29, WS2812_GRB);
 
 static const uint8_t ALARM_PINS[14] = {
      0,  1,  5,  6,  8,  9, 11,   // CH[ 0.. 6]
@@ -63,6 +72,14 @@ void hal_init(void) {
         pinMode(LED_PINS[i], OUTPUT);
         analogWrite(LED_PINS[i], 0);  // N-FET: 0 duty = off
     }
+
+    // Lighting buck — keep disabled until config loaded (pin 30 HIGH = FET on = EN low = off)
+    pinMode(30, OUTPUT);
+    digitalWrite(30, HIGH);
+    pinMode(31, INPUT);   // PG — BAT54S clamp handles 5V tolerance
+
+    // Pixel chain
+    s_pixels.begin();
 
     Serial.begin(115200);
     audio_glue_init();
@@ -101,6 +118,44 @@ void hal_audio_play(uint8_t wav_id) {
 
 bool hal_audio_busy(void)  { return audio_glue_busy();  }
 bool hal_audio_sd_ok(void) { return audio_glue_sd_ok(); }
+
+void hal_pixels_write(const uint8_t *rgb_buf, uint16_t n_pixels) {
+    if (n_pixels > PIXEL_MAX) n_pixels = PIXEL_MAX;
+    for (uint16_t i = 0; i < n_pixels; i++) {
+        s_pixels.setPixel(i, rgb_buf[i*3], rgb_buf[i*3+1], rgb_buf[i*3+2]);
+    }
+    // Blank any pixels beyond n_pixels up to chain length
+    for (uint16_t i = n_pixels; i < PIXEL_MAX; i++) s_pixels.setPixel(i, 0, 0, 0);
+    s_pixels.show();
+}
+
+void hal_lbuck_enable(bool en) {
+    // Pin 30 HIGH → N-FET on → EN pulled low → buck off
+    // Pin 30 LOW  → N-FET off → EN floats/high → buck runs
+    digitalWrite(30, en ? LOW : HIGH);
+}
+
+bool hal_lbuck_pg(void) {
+    return digitalRead(31) == HIGH;
+}
+
+uint8_t hal_eeprom_get(uint16_t addr) {
+    return EEPROM.read(addr);
+}
+
+void hal_eeprom_put(uint16_t addr, uint8_t val) {
+    EEPROM.update(addr, val);   // update only writes if value changed
+}
+
+bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+    File f = SD.open(path);
+    if (!f) return false;
+    size_t n = f.read(buf, max_len - 1);
+    f.close();
+    buf[n] = '\0';
+    if (out_len) *out_len = n;
+    return true;
+}
 
 void hal_log_write(const uint8_t *buf, size_t n) {
     Serial.write(buf, n);

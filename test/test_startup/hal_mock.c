@@ -47,4 +47,10 @@ uint32_t hal_millis(void)                          { return 0; }
 bool     hal_read_alarm(uint8_t ch)                { return (ch < CHANNEL_COUNT) ? g_alarm[ch] : false; }
 bool     hal_read_button(void)                     { return false; }
 uint16_t hal_adc_read(hal_adc_ch_t ch)            { return (ch < 2) ? g_adc[ch] : 0; }
-void     hal_log_write(const uint8_t *b, size_t n) { (void)b; (void)n; }
+void     hal_log_write(const uint8_t *b, size_t n)                          { (void)b; (void)n; }
+void     hal_pixels_write(const uint8_t *b, uint16_t n)                     { (void)b; (void)n; }
+void     hal_lbuck_enable(bool en)                                           { (void)en; }
+bool     hal_lbuck_pg(void)                                                  { return true; }
+uint8_t  hal_eeprom_get(uint16_t addr)                                       { (void)addr; return 0; }
+void     hal_eeprom_put(uint16_t addr, uint8_t val)                          { (void)addr; (void)val; }
+bool     hal_sd_read_file(const char *p, char *b, size_t m, size_t *ol)     { (void)p; (void)b; (void)m; (void)ol; return false; }

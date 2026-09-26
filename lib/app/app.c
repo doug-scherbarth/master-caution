@@ -14,10 +14,14 @@
 #include "startup.h"
 #include "test_mode.h"
 #include "channel_table.h"
+#include "light_cfg.h"
+#include "pixel_lighting.h"
+#include "eeprom_map.h"
 #include "hal.h"
 
-static bool g_raw_ch[CHANNEL_COUNT];
-static bool g_deb_ch[CHANNEL_COUNT];
+static bool        g_raw_ch[CHANNEL_COUNT];
+static bool        g_deb_ch[CHANNEL_COUNT];
+static light_cfg_t g_light_cfg;
 
 void app_init(void) {
     hal_init();
@@ -31,6 +35,13 @@ void app_init(void) {
     ring_log_init();
     test_mode_init();
     startup_init(hal_millis());
+
+    // Lighting: load config from SD (or fall back to built-in), restore
+    // saved config index from EEPROM, enable buck regulator.
+    light_cfg_load(&g_light_cfg);
+    uint8_t saved_idx = hal_eeprom_get(EEPROM_ADDR_LIGHT_CFG);
+    pixel_lighting_init(&g_light_cfg, saved_idx);
+    hal_lbuck_enable(true);
 }
 
 void app_tick(void) {
@@ -72,4 +83,5 @@ void app_tick(void) {
     }
 
     ring_log_tick();
+    pixel_lighting_tick();
 }
