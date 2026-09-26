@@ -42,3 +42,5 @@ bool     hal_sd_read_file(const char *p, char *b, size_t m, size_t *ol)     { (v
 
 void hal_watchdog_enable(uint32_t ms) { (void)ms; }
 void hal_watchdog_kick(void) {}
+void hal_alarm_configure(uint8_t ch, bool ah, hal_pull_t pull) { (void)ch; (void)ah; (void)pull; }
+hal_reset_cause_t hal_reset_cause(void) { return HAL_RESET_POR; }

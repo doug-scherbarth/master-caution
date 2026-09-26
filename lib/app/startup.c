@@ -1,6 +1,6 @@
 // lib/app/startup.c
 #include "startup.h"
-#include "channel_cfg.h"
+#include "channel_table.h"
 #include "hal.h"
 
 // Sine-tone WAV IDs on SD card: 13.WAV, 14.WAV, 15.WAV
@@ -13,7 +13,7 @@ typedef enum {
     SS_GREEN,
     SS_BLUE,
     SS_WHITE,
-    SS_CH_FAULT,      // blue 4 Hz/3 s: input asserted at rest
+    SS_CH_FAULT,      // blue 4 Hz/3 s: input asserted at rest or alarm config error
     SS_DIMMER_WARN,   // amber 2 Hz/2 s: dimmer ADC pegged at rail
     SS_TONE_LO,
     SS_TONE_MID,
@@ -39,10 +39,10 @@ static ss_state_t g_state;
 static uint32_t   g_phase_start;
 static uint32_t   g_flash_last;
 static bool       g_flash_on;
-static bool                  g_sd_ok;
-static bool                  g_ch_fault;
-static bool                  g_dimmer_warn;
-static const channel_cfg_t  *g_ch_cfg;
+static bool       g_sd_ok;
+static bool       g_ch_fault;     // set at white-end: channel asserted OR cfg_fault
+static bool       g_cfg_fault;    // pre-set alarm config error (passed to startup_init)
+static bool       g_dimmer_warn;
 
 static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_RED,   r);
@@ -50,11 +50,11 @@ static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_BLUE,  b);
 }
 
-// Returns true if any non-excluded, enabled channel is asserted at startup.
+// Returns true if any non-excluded channel is asserted at startup.
+// OIL_PRESS_LOW is hardcoded as excluded (always false on a cold engine).
 static bool any_channel_faulted(void) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        if (g_ch_cfg && (g_ch_cfg->ch[i].startup_excluded || !g_ch_cfg->ch[i].enabled))
-            continue;
+        if (i == CH_OIL_PRESS_LOW) continue;
         if (hal_read_alarm(i)) return true;
     }
     return false;
@@ -106,13 +106,20 @@ static ss_state_t after_dimmer(void) {
     return g_sd_ok ? SS_TONE_LO : SS_SD_ERROR;
 }
 
-void startup_init(uint32_t now_ms, const channel_cfg_t *cfg) {
-    g_ch_cfg      = cfg;
+void startup_init(uint32_t now_ms, bool skip_lamp_test, bool cfg_fault) {
     g_flash_on    = false;
     g_flash_last  = 0;
     g_sd_ok       = hal_audio_sd_ok();
     g_ch_fault    = false;
+    g_cfg_fault   = cfg_fault;
     g_dimmer_warn = false;
+
+    if (skip_lamp_test) {
+        // Watchdog reset: go straight to done so alarms are live immediately.
+        rgb(0, 0, 0);
+        g_state = SS_DONE;
+        return;
+    }
     enter(SS_RED, now_ms);
 }
 
@@ -129,7 +136,8 @@ void startup_tick(uint32_t now_ms) {
     case SS_BLUE:  if ((uint32_t)(now_ms-g_phase_start) >= LED_STEP_MS)   enter(SS_WHITE, now_ms); break;
     case SS_WHITE:
         if ((uint32_t)(now_ms - g_phase_start) >= WHITE_STEP_MS) {
-            g_ch_fault = any_channel_faulted();
+            // CH_FAULT triggers if any unexcluded channel is asserted OR alarm cfg was unreadable.
+            g_ch_fault = any_channel_faulted() || g_cfg_fault;
             uint16_t dim_raw = hal_adc_read(HAL_ADC_DIM_IN);
             uint16_t bus_raw = hal_adc_read(HAL_ADC_BUS_SENSE);
             uint32_t ratio32 = (bus_raw > 0u) ? ((uint32_t)dim_raw * 4096u / bus_raw) : 0u;

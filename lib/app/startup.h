@@ -7,12 +7,17 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "channel_cfg.h"
 
-// Starts the sequence immediately. Call after hal_init().
-// cfg provides per-channel startup_excluded flags; must remain valid until
-// startup_active() returns false.
-void startup_init(uint32_t now_ms, const channel_cfg_t *cfg);
+// Starts the sequence.  Call after all modules are initialised.
+//
+// skip_lamp_test  — true when the reset cause was the hardware watchdog:
+//                   lamp test is skipped and startup completes immediately so
+//                   alarms are live without delay.
+//
+// cfg_fault       — true when the alarm config file was found but unreadable:
+//                   triggers the CH_FAULT (4 Hz blue) warning in the sequence
+//                   to alert the pilot that polarity/pull may be wrong.
+void startup_init(uint32_t now_ms, bool skip_lamp_test, bool cfg_fault);
 
 bool startup_active(void);
 

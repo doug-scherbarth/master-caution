@@ -31,8 +31,10 @@ static const char *event_name(log_event_t e) {
 
 static const char *fault_name(uint8_t code) {
     switch (code) {
-    case LOG_FAULT_LBUCK_PG: return "LBUCK_PG";
-    default:                 return "SYS";
+    case LOG_FAULT_LBUCK_PG:       return "LBUCK_PG";
+    case LOG_FAULT_WATCHDOG_RESET: return "WDT_RESET";
+    case LOG_FAULT_ALARM_CFG:      return "ALARM_CFG";
+    default:                       return "SYS";
     }
 }
 

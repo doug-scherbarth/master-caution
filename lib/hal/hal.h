@@ -2,10 +2,10 @@
 //
 // Hardware abstraction layer for the master caution annunciator.
 //
-// Alarm inputs are returned in POSITIVE LOGIC: connector signals are
-// active-high (INPUT_PULLDOWN, assert = HIGH), read directly by
-// hal_read_alarm(). The button is active-low and IS inverted by
-// hal_read_button(). Application code never deals with polarity.
+// Alarm inputs are returned in POSITIVE LOGIC: hal_read_alarm() applies the
+// polarity configured by hal_alarm_configure() so callers always see
+// true = alarm asserted.  The button is active-low and IS inverted by
+// hal_read_button().
 //
 // Two implementations:
 //   src/hal_teensy/  — real, talks to Teensy 4.1 + PCM5102 + SD card
@@ -34,11 +34,31 @@ typedef enum {
     HAL_ADC_BUS_SENSE = 1,   // bus voltage sense — identical divider → Teensy A13 (pin 27)
 } hal_adc_ch_t;
 
+// Input pull resistor mode for alarm channels.
+typedef enum {
+    HAL_PULL_DOWN = 0,   // INPUT_PULLDOWN (default; matches active-high wiring)
+    HAL_PULL_UP   = 1,   // INPUT_PULLUP   (use with active-low inputs)
+    HAL_PULL_NONE = 2,   // INPUT (floating — only when external pull is fitted)
+} hal_pull_t;
+
+// Reset cause reported at boot.  Read once immediately after hal_init().
+typedef enum {
+    HAL_RESET_POR      = 0,  // power-on or cold reset
+    HAL_RESET_WATCHDOG = 1,  // hardware watchdog timeout
+    HAL_RESET_OTHER    = 2,  // software reset, JTAG, lockup, etc.
+} hal_reset_cause_t;
+
 // Lifecycle
 void     hal_init(void);
 uint32_t hal_millis(void);
 
-// Inputs (polarity-corrected: true = asserted)
+// Alarm input configuration — call for each channel after parsing alarm config.
+// Sets pull resistor mode and records polarity for hal_read_alarm().
+// Must be called before the first hal_read_alarm(); safe to call in hal_init()
+// with defaults if config is not yet loaded.
+void     hal_alarm_configure(uint8_t ch, bool active_high, hal_pull_t pull);
+
+// Inputs (polarity-corrected: true = alarm asserted, per hal_alarm_configure)
 bool     hal_read_alarm(uint8_t channel);   // 0..13
 bool     hal_read_button(void);
 uint16_t hal_adc_read(hal_adc_ch_t ch);     // 0..4095, 12-bit ADC
@@ -68,10 +88,12 @@ bool     hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *o
 // Logging — bytes go straight to USB serial on target, stdout on host
 void     hal_log_write(const uint8_t *buf, size_t n);
 
-// Hardware watchdog — enable once at end of init, kick once per app_tick.
-// On target uses RTWDOG; on host the stubs are no-ops.
+// Hardware watchdog — enable once at end of init, kick once at END of app_tick.
 void     hal_watchdog_enable(uint32_t timeout_ms);
 void     hal_watchdog_kick(void);
+
+// Reset cause — valid immediately after hal_init(), read once at boot.
+hal_reset_cause_t hal_reset_cause(void);
 
 #ifdef __cplusplus
 }

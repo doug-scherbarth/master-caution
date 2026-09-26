@@ -24,7 +24,9 @@ typedef enum {
 } log_event_t;
 
 // Fault codes for LOG_SYS_FAULT records
-#define LOG_FAULT_LBUCK_PG  0u   // lighting buck power-good lost
+#define LOG_FAULT_LBUCK_PG       0u   // lighting buck power-good lost
+#define LOG_FAULT_WATCHDOG_RESET 1u   // system reset by hardware watchdog
+#define LOG_FAULT_ALARM_CFG      2u   // /ALARMS.CFG found but unreadable
 
 void ring_log_init(void);
 

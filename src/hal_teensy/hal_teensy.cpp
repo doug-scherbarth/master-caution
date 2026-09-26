@@ -1,7 +1,7 @@
 // src/hal_teensy/hal_teensy.cpp
 // Teensy 4.1 HAL — spec v1.4 pin assignments.
 //
-// DB-15 #1 alarm inputs (active-high, internal pull-down):
+// DB-15 #1 alarm inputs (active-high default; polarity set by hal_alarm_configure):
 //   CH[ 0] CH_CO_DETECT        → pin  0
 //   CH[ 1] CH_L_MAG_FAIL       → pin  1
 //   CH[ 2] CH_R_MAG_FAIL       → pin  5
@@ -43,16 +43,22 @@
 #include "hal.h"
 #include "audio_glue.h"
 
+// --- Reset cause (read SRC_SRSR once at init) ------------------------------
+static hal_reset_cause_t s_reset_cause = HAL_RESET_POR;
+
+// --- Alarm pin configuration -----------------------------------------------
+static const uint8_t ALARM_PINS[14] = {
+     0,  1,  5,  6,  8,  9, 11,   // CH[ 0.. 6]
+    12, 14, 15, 16, 17, 22, 23     // CH[ 7..13]
+};
+
+static bool s_alarm_active_high[14];   // true = alarm asserted when pin HIGH
+
 // --- Pixel chain (WS2812Serial, pin 29, DMA) ------------------------------
 #define PIXEL_MAX 150
 static byte         s_draw_mem[PIXEL_MAX * 3];
 DMAMEM static byte  s_disp_mem[PIXEL_MAX * 12];
 static WS2812Serial s_pixels(PIXEL_MAX, s_disp_mem, s_draw_mem, 29, WS2812_GRB);
-
-static const uint8_t ALARM_PINS[14] = {
-     0,  1,  5,  6,  8,  9, 11,   // CH[ 0.. 6]
-    12, 14, 15, 16, 17, 22, 23     // CH[ 7..13]
-};
 
 #define PIN_BUTTON    18
 #define PIN_DIM_IN    26   // A12
@@ -61,9 +67,24 @@ static const uint8_t ALARM_PINS[14] = {
 static const uint8_t LED_PINS[3] = { 25, 24, 28 };  // R, G, B
 
 void hal_init(void) {
+    // Capture reset cause from SRC_SRSR before it is cleared.
+    uint32_t srsr = SRC_SRSR;
+    if (srsr & (SRC_SRSR_WDOG_RST_B | SRC_SRSR_WDOG3_RST_B))
+        s_reset_cause = HAL_RESET_WATCHDOG;
+    else if (srsr & SRC_SRSR_IPP_RESET_B)
+        s_reset_cause = HAL_RESET_POR;
+    else
+        s_reset_cause = HAL_RESET_OTHER;
+
+    // Alarm pins: do NOT configure pull here.
+    // hal_alarm_configure() is called by app_init() after alarm_cfg_load()
+    // with the correct pull per channel.  Pre-set polarity to active-high.
     for (int i = 0; i < 14; i++) {
-        pinMode(ALARM_PINS[i], INPUT_PULLDOWN);
+        s_alarm_active_high[i] = true;
+        // Leave as INPUT (no pull) until hal_alarm_configure() is called.
+        pinMode(ALARM_PINS[i], INPUT);
     }
+
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
     analogReadResolution(12);
@@ -86,13 +107,28 @@ void hal_init(void) {
     audio_glue_init();
 }
 
+hal_reset_cause_t hal_reset_cause(void) { return s_reset_cause; }
+
+void hal_alarm_configure(uint8_t ch, bool active_high, hal_pull_t pull) {
+    if (ch >= 14) return;
+    s_alarm_active_high[ch] = active_high;
+    int mode;
+    switch (pull) {
+    case HAL_PULL_DOWN: mode = INPUT_PULLDOWN; break;
+    case HAL_PULL_UP:   mode = INPUT_PULLUP;   break;
+    default:            mode = INPUT;           break;
+    }
+    pinMode(ALARM_PINS[ch], mode);
+}
+
 uint32_t hal_millis(void) {
     return millis();
 }
 
 bool hal_read_alarm(uint8_t channel) {
     if (channel >= 14) return false;
-    return digitalRead(ALARM_PINS[channel]);   // active-high → positive logic
+    bool raw = digitalRead(ALARM_PINS[channel]);
+    return s_alarm_active_high[channel] ? raw : !raw;  // apply configured polarity
 }
 
 bool hal_read_button(void) {

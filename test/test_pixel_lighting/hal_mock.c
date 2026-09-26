@@ -78,3 +78,5 @@ void     hal_eeprom_put(uint16_t addr, uint8_t val)                          { (
 
 void hal_watchdog_enable(uint32_t ms) { (void)ms; }
 void hal_watchdog_kick(void) {}
+void hal_alarm_configure(uint8_t ch, bool ah, hal_pull_t pull) { (void)ch; (void)ah; (void)pull; }
+hal_reset_cause_t hal_reset_cause(void) { return HAL_RESET_POR; }
