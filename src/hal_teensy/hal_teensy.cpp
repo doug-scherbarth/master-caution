@@ -1,7 +1,7 @@
 // src/hal_teensy/hal_teensy.cpp
 // Teensy 4.1 HAL — spec v1.4 pin assignments.
 //
-// DB-15 #1 alarm inputs (active-low, internal pull-up):
+// DB-15 #1 alarm inputs (active-high, internal pull-down):
 //   CH[ 0] CH_CO_DETECT        → pin  0
 //   CH[ 1] CH_L_MAG_FAIL       → pin  1
 //   CH[ 2] CH_R_MAG_FAIL       → pin  5
@@ -17,15 +17,15 @@
 //   CH[12] CH_AIRSPEED_OVER_VFE→ pin 22
 //   CH[13] CH_BOOST_PUMP_ON    → pin 23
 //
-// Button SW_MC (active-low, 4.7k + BAT54S) → pin 10
+// Button SW_MC (active-low, internal pull-up) → pin 18
 //
 // Dimmer (ratiometric, §6.2):
 //   DIM_IN    → pin 26 (A12)
 //   BUS_SENSE → pin 27 (A13)
 //
 // Button LED (cathode-sink, §9.4):
-//   Red   → pin 2   Blue  → pin 4
-//   Green → pin 3   AUX   → not wired (HAL_LED_AUX writes are ignored)
+//   Red   → pin 25   Blue  → pin 28
+//   Green → pin 24   AUX   → not wired (HAL_LED_AUX writes are ignored)
 //
 // I2S (managed by Audio library):
 //   pin  7 = I2S TX data (DIN → PCM5102)
@@ -44,15 +44,15 @@ static const uint8_t ALARM_PINS[14] = {
     12, 14, 15, 16, 17, 22, 23     // CH[ 7..13]
 };
 
-#define PIN_BUTTON    10
+#define PIN_BUTTON    18
 #define PIN_DIM_IN    26   // A12
 #define PIN_BUS_SENSE 27   // A13
 
-static const uint8_t LED_PINS[3] = { 2, 3, 4 };  // R, G, B
+static const uint8_t LED_PINS[3] = { 25, 24, 28 };  // R, G, B
 
 void hal_init(void) {
     for (int i = 0; i < 14; i++) {
-        pinMode(ALARM_PINS[i], INPUT_PULLUP);
+        pinMode(ALARM_PINS[i], INPUT_PULLDOWN);
     }
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
@@ -61,7 +61,7 @@ void hal_init(void) {
 
     for (int i = 0; i < 3; i++) {
         pinMode(LED_PINS[i], OUTPUT);
-        analogWrite(LED_PINS[i], 4095);  // cathode-sink: high = off
+        analogWrite(LED_PINS[i], 0);  // N-FET: 0 duty = off
     }
 
     Serial.begin(115200);
@@ -74,7 +74,7 @@ uint32_t hal_millis(void) {
 
 bool hal_read_alarm(uint8_t channel) {
     if (channel >= 14) return false;
-    return !digitalRead(ALARM_PINS[channel]);  // active-low → positive logic
+    return digitalRead(ALARM_PINS[channel]);   // active-high → positive logic
 }
 
 bool hal_read_button(void) {
@@ -91,8 +91,8 @@ uint16_t hal_adc_read(hal_adc_ch_t ch) {
 
 void hal_set_led_duty(hal_led_t led, uint16_t duty) {
     if (led >= 3u) return;  // HAL_LED_AUX not wired; future pixel_lighting
-    // Cathode-sink: invert so duty 0 = off, 4095 = full bright.
-    analogWrite(LED_PINS[led], 4095u - duty);
+    // N-FET drive: duty maps directly — 0 = off, 4095 = full bright.
+    analogWrite(LED_PINS[led], duty);
 }
 
 void hal_audio_play(uint8_t wav_id) {
