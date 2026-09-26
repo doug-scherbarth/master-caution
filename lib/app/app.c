@@ -23,6 +23,7 @@
 static bool        g_raw_ch[CHANNEL_COUNT];
 static bool        g_deb_ch[CHANNEL_COUNT];
 static light_cfg_t g_light_cfg;
+static bool        g_pg_ok = true;  // track PG edge for one-shot fault log
 
 void app_init(void) {
     hal_init();
@@ -88,8 +89,11 @@ void app_tick(void) {
 
     ring_log_tick();
 
-    // Dimmer gesture: quick dip (<20%) or bump (>80%) advances lighting config
-    uint8_t dim_ratio = (uint8_t)(dimmer_get_norm_q12() >> 4);
+    // Dimmer gesture uses raw ratiometric ADC (no IIR) to detect sharp dips/bumps.
+    uint16_t _dim_r  = hal_adc_read(HAL_ADC_DIM_IN);
+    uint16_t _bus_r  = hal_adc_read(HAL_ADC_BUS_SENSE);
+    uint32_t _r32    = _bus_r ? ((uint32_t)_dim_r * 255u + _bus_r / 2u) / _bus_r : 0u;
+    uint8_t  dim_ratio = _r32 > 255u ? 255u : (uint8_t)_r32;
     if (dimmer_gesture_tick(now, dim_ratio)) {
         uint8_t next = (uint8_t)((pixel_lighting_get_config() + 1u) % g_light_cfg.n_configs);
         pixel_lighting_set_config(next);
@@ -97,4 +101,9 @@ void app_tick(void) {
     }
 
     pixel_lighting_tick();
+
+    // Monitor lighting buck PG; log once on falling edge (good → faulted).
+    bool pg_now = hal_lbuck_pg();
+    if (!pg_now && g_pg_ok) ring_log_fault(LOG_FAULT_LBUCK_PG, now);
+    g_pg_ok = pg_now;
 }

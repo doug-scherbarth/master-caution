@@ -125,6 +125,37 @@ void test_drain_then_refill_does_not_drop(void) {
     TEST_ASSERT_EQUAL(31, ring_log_pending_count());
 }
 
+// --- Fault logging ------------------------------------------------
+
+void test_fault_lbuck_pg_formats(void) {
+    ring_log_fault(LOG_FAULT_LBUCK_PG, 5000);
+    TEST_ASSERT_EQUAL(1, ring_log_pending_count());
+    ring_log_tick();
+    TEST_ASSERT_EQUAL(0, ring_log_pending_count());
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "FAULT"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "LBUCK_PG"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "5000"));
+}
+
+void test_fault_and_alarm_interleave(void) {
+    ring_log_alarm(LOG_ALARM_ASSERT, find_alarm("CO_DETECT"), 100);
+    ring_log_fault(LOG_FAULT_LBUCK_PG, 200);
+    ring_log_alarm(LOG_ALARM_ACK, find_alarm("CO_DETECT"), 300);
+
+    for (int i = 0; i < 3; i++) ring_log_tick();
+
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "CO_DETECT"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "LBUCK_PG"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "ACK"));
+}
+
+void test_fault_unknown_code_formats(void) {
+    ring_log_fault(0xAA, 9999);
+    ring_log_tick();
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "FAULT"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_log_buf, "SYS"));
+}
+
 // --- Wrap behavior ------------------------------------------------
 
 void test_buffer_wraps_correctly(void) {
@@ -153,5 +184,8 @@ int main(void) {
     RUN_TEST(test_overflow_drops_with_counter);
     RUN_TEST(test_drain_then_refill_does_not_drop);
     RUN_TEST(test_buffer_wraps_correctly);
+    RUN_TEST(test_fault_lbuck_pg_formats);
+    RUN_TEST(test_fault_and_alarm_interleave);
+    RUN_TEST(test_fault_unknown_code_formats);
     return UNITY_END();
 }

@@ -29,6 +29,13 @@ static const char *event_name(log_event_t e) {
     }
 }
 
+static const char *fault_name(uint8_t code) {
+    switch (code) {
+    case LOG_FAULT_LBUCK_PG: return "LBUCK_PG";
+    default:                 return "SYS";
+    }
+}
+
 static uint8_t pending(void) {
     return (uint8_t)((g_head - g_tail) & RING_LOG_MASK);
 }
@@ -56,17 +63,28 @@ void ring_log_tick(void) {
     if (g_head == g_tail) return;          // empty
 
     const record_t *r = &g_buf[g_tail];
-    const char *name  = (r->alarm_idx < ALARM_COUNT)
-                          ? ALARM_TABLE[r->alarm_idx].name : "?";
-
     char line[64];
-    int n = snprintf(line, sizeof(line), "[%lu] %s %s\n",
+    int n;
+
+    if (r->event == LOG_SYS_FAULT) {
+        n = snprintf(line, sizeof(line), "[%lu] FAULT %s\n",
+                     (unsigned long)r->ts_ms, fault_name(r->alarm_idx));
+    } else {
+        const char *name = (r->alarm_idx < ALARM_COUNT)
+                             ? ALARM_TABLE[r->alarm_idx].name : "?";
+        n = snprintf(line, sizeof(line), "[%lu] %s %s\n",
                      (unsigned long)r->ts_ms, name, event_name(r->event));
+    }
+
     if (n > 0) {
         if (n > (int)(sizeof(line) - 1)) n = (int)(sizeof(line) - 1);
         hal_log_write((const uint8_t *)line, (size_t)n);
     }
     g_tail = (uint8_t)(g_tail + 1) & RING_LOG_MASK;
+}
+
+void ring_log_fault(uint8_t fault_code, uint32_t now_ms) {
+    ring_log_alarm(LOG_SYS_FAULT, fault_code, now_ms);
 }
 
 uint32_t ring_log_dropped_count(void) { return g_dropped; }
