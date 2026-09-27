@@ -6,7 +6,8 @@
 #include <unity.h>
 #include "led_controller.h"
 
-#define MC_FLOOR_Q12 614   // mirror of internal constant for clarity in tests
+#define MC_FLOOR_Q12         614   // acked/steady floor (15%)
+#define MC_FLOOR_PENDING_Q12 1433  // unacknowledged (flashing) floor (35%)
 
 static led_drive_t out;
 
@@ -128,12 +129,36 @@ void test_pending_flash_uses_dimmed_duty_in_on_phase(void) {
     TEST_ASSERT_EQUAL(0, out.green);     // OFF
 }
 
-void test_pending_flash_with_dim_below_floor_uses_floor(void) {
+void test_pending_flash_with_dim_below_floor_uses_pending_floor(void) {
+    // ON phase at dimmer=0: clamped to higher pending floor (35%)
     led_controller_tick(0, SEV_HIGH, true, 0, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);  // ON, clamped to floor
+    TEST_ASSERT_EQUAL(MC_FLOOR_PENDING_Q12, out.red);
 
+    // OFF phase stays dark regardless of floor
     led_controller_tick(250, SEV_HIGH, true, 0, &out);
-    TEST_ASSERT_EQUAL(0, out.red);             // OFF
+    TEST_ASSERT_EQUAL(0, out.red);
+}
+
+void test_acked_alarm_uses_lower_floor(void) {
+    // Acked alarm (any_pending=false) uses 15% floor, not 35%
+    led_controller_tick(0, SEV_HIGH, false, 0, &out);
+    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);
+}
+
+void test_pending_floor_above_acked_floor(void) {
+    TEST_ASSERT_GREATER_THAN(MC_FLOOR_Q12, MC_FLOOR_PENDING_Q12);
+}
+
+void test_pending_dimmer_between_floors_uses_pending_floor(void) {
+    // dimmer = 800 (above acked 15% but below pending 35%) → should clamp to pending floor
+    led_controller_tick(0, SEV_HIGH, true, 800, &out);
+    TEST_ASSERT_EQUAL(MC_FLOOR_PENDING_Q12, out.red);
+}
+
+void test_pending_dimmer_above_pending_floor_passes_through(void) {
+    // dimmer above both floors → passes through unchanged
+    led_controller_tick(0, SEV_HIGH, true, 2000, &out);
+    TEST_ASSERT_EQUAL(2000, out.red);
 }
 
 // --- Test runner ----------------------------------------------------
@@ -155,6 +180,10 @@ int main(void) {
     RUN_TEST(test_dimmer_above_floor_passes_through);
     RUN_TEST(test_dimmer_full_passes_through);
     RUN_TEST(test_pending_flash_uses_dimmed_duty_in_on_phase);
-    RUN_TEST(test_pending_flash_with_dim_below_floor_uses_floor);
+    RUN_TEST(test_pending_flash_with_dim_below_floor_uses_pending_floor);
+    RUN_TEST(test_acked_alarm_uses_lower_floor);
+    RUN_TEST(test_pending_floor_above_acked_floor);
+    RUN_TEST(test_pending_dimmer_between_floors_uses_pending_floor);
+    RUN_TEST(test_pending_dimmer_above_pending_floor_passes_through);
     return UNITY_END();
 }
