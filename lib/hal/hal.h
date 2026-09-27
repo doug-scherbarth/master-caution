@@ -81,9 +81,15 @@ bool     hal_lbuck_pg(void);       // true = power good
 uint8_t  hal_eeprom_get(uint16_t addr);
 void     hal_eeprom_put(uint16_t addr, uint8_t val);
 
-// SD file read — returns true on success; out_len set to bytes read (excl. NUL)
-// buf is NUL-terminated on success. Fails silently if file > max_len-1 bytes.
-bool     hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len);
+// SD file read
+typedef enum {
+    HAL_SD_OK = 0,
+    HAL_SD_NOT_FOUND,
+    HAL_SD_TOO_BIG,
+    HAL_SD_IO_ERROR
+} hal_sd_status_t;
+// buf is NUL-terminated on HAL_SD_OK; out_len set to bytes read (excl. NUL).
+hal_sd_status_t hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len);
 
 // Logging — bytes go straight to USB serial on target, stdout on host
 void     hal_log_write(const uint8_t *buf, size_t n);

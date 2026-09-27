@@ -47,7 +47,7 @@ void     hal_lbuck_enable(bool en)                                           { (
 bool     hal_lbuck_pg(void)                                                  { return true; }
 uint8_t  hal_eeprom_get(uint16_t addr)                                       { (void)addr; return 0; }
 void     hal_eeprom_put(uint16_t addr, uint8_t val)                          { (void)addr; (void)val; }
-bool     hal_sd_read_file(const char *p, char *b, size_t m, size_t *ol)     { (void)p; (void)b; (void)m; (void)ol; return false; }
+hal_sd_status_t hal_sd_read_file(const char *p, char *b, size_t m, size_t *ol) { (void)p; (void)b; (void)m; (void)ol; return HAL_SD_NOT_FOUND; }
 
 void hal_watchdog_enable(uint32_t ms) { (void)ms; }
 void hal_watchdog_kick(void) {}

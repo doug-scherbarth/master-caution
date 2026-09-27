@@ -184,15 +184,18 @@ void hal_eeprom_put(uint16_t addr, uint8_t val) {
     EEPROM.update(addr, val);   // update only writes if value changed
 }
 
-bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+hal_sd_status_t hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+    if (!SD.exists(path)) return HAL_SD_NOT_FOUND;
     File f = SD.open(path);
-    if (!f) return false;
-    if ((size_t)f.size() >= max_len) { f.close(); return false; }
+    if (!f) return HAL_SD_IO_ERROR;
+    size_t file_size = (size_t)f.size();
+    if (file_size >= max_len) { f.close(); return HAL_SD_TOO_BIG; }
     size_t n = f.read(buf, max_len - 1);
     f.close();
+    if (n != file_size) return HAL_SD_IO_ERROR;
     buf[n] = '\0';
     if (out_len) *out_len = n;
-    return true;
+    return HAL_SD_OK;
 }
 
 void hal_log_write(const uint8_t *buf, size_t n) {

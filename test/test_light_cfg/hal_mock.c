@@ -8,29 +8,26 @@
 
 // SD file mock state
 static const char *g_sd_content = NULL;
-static bool        g_sd_ok      = false;
 
 void hal_mock_reset(void) {
     g_sd_content = NULL;
-    g_sd_ok      = false;
 }
 
-// Set up the mock SD content.  Pass NULL to simulate missing/failed read.
+// Set up the mock SD content.  Pass NULL to simulate a missing file.
 void hal_mock_set_sd_file(const char *content) {
     g_sd_content = content;
-    g_sd_ok      = (content != NULL);
 }
 
 // HAL implementation
-bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+hal_sd_status_t hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
     (void)path;
-    if (!g_sd_ok || !g_sd_content) return false;
+    if (!g_sd_content) return HAL_SD_NOT_FOUND;
     size_t n = strlen(g_sd_content);
-    if (n >= max_len) n = max_len - 1;
+    if (n >= max_len) return HAL_SD_TOO_BIG;
     memcpy(buf, g_sd_content, n);
     buf[n] = '\0';
     if (out_len) *out_len = n;
-    return true;
+    return HAL_SD_OK;
 }
 
 // Stubs

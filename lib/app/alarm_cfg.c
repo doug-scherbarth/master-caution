@@ -170,13 +170,12 @@ void alarm_cfg_parse(const char *text, alarm_cfg_t *out) {
 alarm_cfg_status_t alarm_cfg_load(alarm_cfg_t *out) {
     static char s_buf[ALARM_CFG_FILE_MAX];
     size_t len = 0;
-    if (!hal_sd_read_file("/ALARMS.CFG", s_buf, sizeof(s_buf), &len)) {
-        // hal_sd_read_file returns false both when the file is absent AND when
-        // it is too large.  Distinguish: a 0-length read means absent; a buffer
-        // overflow means the file exists but couldn't be read.
-        // Since hal_sd_read_file doesn't expose the distinction, treat any
-        // failure as NO_FILE and use compiled defaults.  The caller is responsible
-        // for separately handling the case where polarity matters.
+    hal_sd_status_t sd_st = hal_sd_read_file("/ALARMS.CFG", s_buf, sizeof(s_buf), &len);
+    if (sd_st == HAL_SD_TOO_BIG || sd_st == HAL_SD_IO_ERROR) {
+        alarm_cfg_fallback(out);
+        return ALARM_CFG_ERROR;
+    }
+    if (sd_st != HAL_SD_OK) {
         alarm_cfg_fallback(out);
         return ALARM_CFG_NO_FILE;
     }

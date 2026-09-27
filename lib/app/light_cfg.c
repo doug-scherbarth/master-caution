@@ -193,7 +193,7 @@ bool light_cfg_load(light_cfg_t *out) {
     static char s_file_buf[LIGHT_CFG_FILE_MAX];
     size_t file_len = 0;
 
-    if (!hal_sd_read_file("/LIGHTS.CFG", s_file_buf, sizeof(s_file_buf), &file_len)) {
+    if (hal_sd_read_file("/LIGHTS.CFG", s_file_buf, sizeof(s_file_buf), &file_len) != HAL_SD_OK) {
         light_cfg_fallback(out);
         return false;
     }

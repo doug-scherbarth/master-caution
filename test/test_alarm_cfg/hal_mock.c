@@ -8,14 +8,14 @@ static const char *g_file_content = NULL;
 void hal_mock_reset(void)                    { g_file_content = NULL; }
 void hal_mock_set_file(const char *content)  { g_file_content = content; }
 
-bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+hal_sd_status_t hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
     (void)path;
-    if (!g_file_content) return false;
+    if (!g_file_content) return HAL_SD_NOT_FOUND;
     size_t n = strlen(g_file_content);
-    if (n >= max_len) return false;
+    if (n >= max_len) return HAL_SD_TOO_BIG;
     memcpy(buf, g_file_content, n + 1);
     if (out_len) *out_len = n;
-    return true;
+    return HAL_SD_OK;
 }
 
 // Unused HAL stubs required for linking

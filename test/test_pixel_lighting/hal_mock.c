@@ -50,15 +50,15 @@ uint16_t hal_adc_read(hal_adc_ch_t ch) {
     return 0;
 }
 
-bool hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
+hal_sd_status_t hal_sd_read_file(const char *path, char *buf, size_t max_len, size_t *out_len) {
     (void)path;
-    if (!g_sd_content) return false;
+    if (!g_sd_content) return HAL_SD_NOT_FOUND;
     size_t n = strlen(g_sd_content);
-    if (n >= max_len) n = max_len - 1;
+    if (n >= max_len) return HAL_SD_TOO_BIG;
     memcpy(buf, g_sd_content, n);
     buf[n] = '\0';
     if (out_len) *out_len = n;
-    return true;
+    return HAL_SD_OK;
 }
 
 // Stubs
