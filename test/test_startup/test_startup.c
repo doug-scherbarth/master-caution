@@ -294,8 +294,10 @@ void test_mid_range_dimmer_no_warn(void) {
     TEST_ASSERT_EQUAL(0, GREEN);
 }
 
-void test_dimmer_low_triggers_amber(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
+void test_bus_low_triggers_amber(void) {
+    // BUS_SENSE implausibly low (< 2532 ≈ 10 V) → amber warning
+    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 1000u);
+    hal_mock_set_adc(HAL_ADC_DIM_IN,     500u);  // mid-range knob, irrelevant
     startup_init(0, false, false);
     advance_to_white_end();
     TEST_ASSERT_EQUAL(4095, RED);
@@ -304,18 +306,9 @@ void test_dimmer_low_triggers_amber(void) {
     TEST_ASSERT_EQUAL(0,    hal_play_calls);
 }
 
-void test_dimmer_high_triggers_amber(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 3100);  // ratio=4133 clamped to 4095 > 3995 → flagged
-    startup_init(0, false, false);
-    advance_to_white_end();
-    TEST_ASSERT_EQUAL(4095, RED);
-    TEST_ASSERT_EQUAL(4095, GREEN);
-    TEST_ASSERT_EQUAL(0,    BLUE);
-    TEST_ASSERT_EQUAL(0,    hal_play_calls);
-}
-
-void test_dimmer_warn_amber_toggles_at_2hz(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);   // ratio=67 < 100 → flagged
+void test_bus_warn_amber_toggles_at_2hz(void) {
+    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 1000u);
+    hal_mock_set_adc(HAL_ADC_DIM_IN,     500u);
     startup_init(0, false, false);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
@@ -327,8 +320,9 @@ void test_dimmer_warn_amber_toggles_at_2hz(void) {
     TEST_ASSERT_EQUAL(4095, GREEN);
 }
 
-void test_dimmer_warn_proceeds_to_tones_after_2s(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);
+void test_bus_warn_proceeds_to_tones_after_2s(void) {
+    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 1000u);
+    hal_mock_set_adc(HAL_ADC_DIM_IN,     500u);
     startup_init(0, false, false);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
@@ -336,8 +330,9 @@ void test_dimmer_warn_proceeds_to_tones_after_2s(void) {
     TEST_ASSERT_EQUAL(1, hal_play_calls);
 }
 
-void test_dimmer_warn_then_sd_error(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);
+void test_bus_warn_then_sd_error(void) {
+    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 1000u);
+    hal_mock_set_adc(HAL_ADC_DIM_IN,     500u);
     hal_mock_set_sd_ok(false);
     startup_init(0, false, false);
     advance_to_white_end();
@@ -348,13 +343,14 @@ void test_dimmer_warn_then_sd_error(void) {
     TEST_ASSERT_EQUAL(0,    GREEN);
 }
 
-void test_ch_fault_then_dimmer_warn(void) {
+void test_ch_fault_then_bus_warn(void) {
     hal_mock_set_alarm(CH_CO_DETECT, true);
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 50);
+    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 1000u);
+    hal_mock_set_adc(HAL_ADC_DIM_IN,     500u);
     startup_init(0, false, false);
     advance_to_white_end();
     uint32_t t = LED_MS * 3 + WHITE_MS;
-    startup_tick(t + 3000);   // CH_FAULT → SS_DIMMER_WARN
+    startup_tick(t + 3000);   // CH_FAULT → SS_DIMMER_WARN (bus warn)
     TEST_ASSERT_EQUAL(4095, RED);
     TEST_ASSERT_EQUAL(4095, GREEN);
     TEST_ASSERT_EQUAL(0,    BLUE);
@@ -437,12 +433,11 @@ int main(void) {
     RUN_TEST(test_watchdog_reset_no_tones);
     RUN_TEST(test_watchdog_reset_cfg_fault_ignored);
     RUN_TEST(test_mid_range_dimmer_no_warn);
-    RUN_TEST(test_dimmer_low_triggers_amber);
-    RUN_TEST(test_dimmer_high_triggers_amber);
-    RUN_TEST(test_dimmer_warn_amber_toggles_at_2hz);
-    RUN_TEST(test_dimmer_warn_proceeds_to_tones_after_2s);
-    RUN_TEST(test_dimmer_warn_then_sd_error);
-    RUN_TEST(test_ch_fault_then_dimmer_warn);
+    RUN_TEST(test_bus_low_triggers_amber);
+    RUN_TEST(test_bus_warn_amber_toggles_at_2hz);
+    RUN_TEST(test_bus_warn_proceeds_to_tones_after_2s);
+    RUN_TEST(test_bus_warn_then_sd_error);
+    RUN_TEST(test_ch_fault_then_bus_warn);
     RUN_TEST(test_sd_error_skips_tones_and_fast_flashes_red);
     RUN_TEST(test_sd_error_red_toggles_at_5hz);
     RUN_TEST(test_sd_error_transitions_to_ack_wait_after_5s);

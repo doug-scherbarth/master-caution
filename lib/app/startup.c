@@ -27,10 +27,9 @@ typedef enum {
 #define WHITE_STEP_MS          400u
 #define CH_FAULT_FLASH_HALF_MS 125u   // 4 Hz blue channel-fault flash
 #define CH_FAULT_DURATION_MS  3000u
-#define DIMMER_WARN_HALF_MS    250u   // 2 Hz amber dimmer-fault flash
+#define DIMMER_WARN_HALF_MS    250u   // 2 Hz amber bus-fault flash
 #define DIMMER_WARN_DURATION_MS 2000u
-#define DIMMER_LOW_LIMIT        100u  // ADC counts; below → open/shorted wiper
-#define DIMMER_HIGH_LIMIT      3995u
+#define BUS_LOW_LIMIT          2532u  // ~10 V on 39k/10k divider → implausible
 #define SD_ERR_FLASH_HALF_MS   100u   // 5 Hz red SD-error flash
 #define SD_ERR_DURATION_MS    5000u
 #define FLASH_HALF_MS          250u   // 2 Hz green ACK flash
@@ -52,11 +51,10 @@ static void rgb(uint16_t r, uint16_t g, uint16_t b) {
     hal_set_led_duty(HAL_LED_BLUE,  b);
 }
 
-// Returns true if any non-excluded channel is asserted at startup.
-// OIL_PRESS_LOW is hardcoded as excluded (always false on a cold engine).
+// Returns true if any channel not expected_at_rest is asserted at startup.
 static bool any_channel_faulted(void) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        if (i == CH_OIL_PRESS_LOW) continue;
+        if (CHANNEL_TABLE[i].expected_at_rest) continue;
         if (hal_read_alarm(i)) return true;
     }
     return false;
@@ -145,11 +143,8 @@ void startup_tick(uint32_t now_ms) {
         if ((uint32_t)(now_ms - g_phase_start) >= WHITE_STEP_MS) {
             // CH_FAULT triggers if any unexcluded channel is asserted OR alarm cfg was unreadable.
             g_ch_fault = any_channel_faulted() || g_cfg_fault;
-            uint16_t dim_raw = hal_adc_read(HAL_ADC_DIM_IN);
             uint16_t bus_raw = hal_adc_read(HAL_ADC_BUS_SENSE);
-            uint32_t ratio32 = (bus_raw > 0u) ? ((uint32_t)dim_raw * 4096u / bus_raw) : 0u;
-            uint16_t ratio   = (ratio32 > 4095u) ? 4095u : (uint16_t)ratio32;
-            g_dimmer_warn = (ratio < DIMMER_LOW_LIMIT || ratio > DIMMER_HIGH_LIMIT);
+            g_dimmer_warn = (bus_raw < BUS_LOW_LIMIT);
             if      (g_ch_fault)    enter(SS_CH_FAULT,    now_ms);
             else if (g_dimmer_warn) enter(SS_DIMMER_WARN, now_ms);
             else                    enter(after_dimmer(),  now_ms);
