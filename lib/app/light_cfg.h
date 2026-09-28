@@ -17,7 +17,7 @@
 #define LIGHT_MAX_CONFIGS     8u
 #define LIGHT_MAX_SEGS        4u
 #define LIGHT_NAME_LEN       16u
-#define LIGHT_CFG_FILE_MAX 4096u   // max /LIGHTS.CFG file size in bytes
+#define LIGHT_CFG_FILE_MAX 8192u   // max /LIGHTS.CFG file size in bytes
 
 typedef struct {
     uint16_t start;       // first pixel index in chain (0-based)

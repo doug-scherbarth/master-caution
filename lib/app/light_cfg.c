@@ -2,6 +2,7 @@
 // INI-style LIGHTS.CFG parser for WS2812B cabin/panel lighting.
 
 #include "light_cfg.h"
+#include "ring_log.h"
 #include "hal.h"
 #include <string.h>
 #include <stdlib.h>
@@ -133,7 +134,13 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
             else if (strcmp(key, "ma_per_channel")      == 0) out->mA_per_channel     = (uint16_t)atoi(vp);
             else if (strcmp(key, "quiescent_ma")        == 0) out->quiescent_mA       = (uint16_t)atoi(vp);
             else if (strcmp(key, "max_current_ma")      == 0) out->max_current_mA     = (uint16_t)atoi(vp);
-            else if (strcmp(key, "gamma")               == 0) gamma = strtof(vp, NULL);
+            else if (strcmp(key, "gamma")               == 0) {
+                float g = strtof(vp, NULL);
+                if (g <= 0.0f)       gamma = 2.2f;  // non-numeric or zero/negative → default
+                else if (g < 1.0f)   gamma = 1.0f;
+                else if (g > 3.0f)   gamma = 3.0f;
+                else                 gamma = g;
+            }
             else if (strcmp(key, "gesture_low_pct")     == 0) { int v = atoi(vp); out->gesture_low_pct    = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
             else if (strcmp(key, "gesture_high_pct")    == 0) { int v = atoi(vp); out->gesture_high_pct   = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
             else if (strcmp(key, "gesture_timeout_ms")  == 0) out->gesture_timeout_ms = (uint16_t)atoi(vp);
@@ -154,10 +161,10 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
                 cur_cfg->name[LIGHT_NAME_LEN - 1] = '\0';
             } else if (seg_open) {
                 if      (strcmp(key, "count") == 0) seg.count     = (uint16_t)atoi(vp);
-                else if (strcmp(key, "r")     == 0) seg.r         = (uint8_t)atoi(vp);
-                else if (strcmp(key, "g")     == 0) seg.g         = (uint8_t)atoi(vp);
-                else if (strcmp(key, "b")     == 0) seg.b         = (uint8_t)atoi(vp);
-                else if (strcmp(key, "scale") == 0) seg.scale_pct = (uint8_t)atoi(vp);
+                else if (strcmp(key, "r")     == 0) { int v = atoi(vp); seg.r         = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
+                else if (strcmp(key, "g")     == 0) { int v = atoi(vp); seg.g         = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
+                else if (strcmp(key, "b")     == 0) { int v = atoi(vp); seg.b         = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
+                else if (strcmp(key, "scale") == 0) { int v = atoi(vp); seg.scale_pct = (uint8_t)(v < 0 ? 0 : v > 100 ? 100 : v); }
             }
         }
     }
@@ -170,6 +177,12 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
 
     if (out->total_pixels > LIGHT_MAX_PIXELS)
         out->total_pixels = LIGHT_MAX_PIXELS;
+
+    // Validate gesture thresholds: low must be strictly below high.
+    if (out->gesture_low_pct >= out->gesture_high_pct) {
+        out->gesture_low_pct  = 20;
+        out->gesture_high_pct = 80;
+    }
 
     build_gamma_lut(out->gamma_lut, gamma);
 
@@ -214,7 +227,11 @@ bool light_cfg_load(light_cfg_t *out) {
     static char s_file_buf[LIGHT_CFG_FILE_MAX];
     size_t file_len = 0;
 
-    if (hal_sd_read_file("/LIGHTS.CFG", s_file_buf, sizeof(s_file_buf), &file_len) != HAL_SD_OK) {
+    hal_sd_status_t sd_status =
+        hal_sd_read_file("/LIGHTS.CFG", s_file_buf, sizeof(s_file_buf), &file_len);
+    if (sd_status != HAL_SD_OK) {
+        if (sd_status == HAL_SD_TOO_BIG)
+            ring_log_fault(LOG_FAULT_LIGHT_CFG, 0u);
         light_cfg_fallback(out);
         return false;
     }

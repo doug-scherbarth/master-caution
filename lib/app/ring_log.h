@@ -27,6 +27,7 @@ typedef enum {
 #define LOG_FAULT_LBUCK_PG       0u   // lighting buck power-good lost
 #define LOG_FAULT_WATCHDOG_RESET 1u   // system reset by hardware watchdog
 #define LOG_FAULT_ALARM_CFG      2u   // /ALARMS.CFG found but unreadable
+#define LOG_FAULT_LIGHT_CFG      3u   // /LIGHTS.CFG too large to read
 
 void ring_log_init(void);
 

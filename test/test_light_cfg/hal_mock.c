@@ -51,3 +51,6 @@ void hal_watchdog_enable(uint32_t ms) { (void)ms; }
 void hal_watchdog_kick(void) {}
 void hal_alarm_configure(uint8_t ch, bool ah, hal_pull_t pull) { (void)ch; (void)ah; (void)pull; }
 hal_reset_cause_t hal_reset_cause(void) { return HAL_RESET_POR; }
+
+// ring_log stub — light_cfg_load() may call ring_log_fault for TOO_BIG
+void ring_log_fault(uint8_t fault_code, uint32_t now_ms) { (void)fault_code; (void)now_ms; }
