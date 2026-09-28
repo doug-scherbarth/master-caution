@@ -60,17 +60,17 @@ void app_init(void) {
     // Log reset cause now that ring_log is ready.
     if (reset_cause == HAL_RESET_WATCHDOG)
         ring_log_fault(LOG_FAULT_WATCHDOG_RESET, hal_millis());
-    if (alarm_status == ALARM_CFG_ERROR)
+    if (alarm_status == ALARM_CFG_ERROR || alarm_status == ALARM_CFG_WARN)
         ring_log_fault(LOG_FAULT_ALARM_CFG, hal_millis());
 
     // Dump effective alarm config to USB serial for field diagnostics.
     alarm_cfg_dump(&g_alarm_cfg, alarm_status);
 
     // Skip lamp test on watchdog reset so alarms are live immediately.
-    // Alarm config error surfaces through the CH_FAULT (blue flash) path.
+    // Alarm config error or warnings surface through the CH_FAULT (blue flash) path.
     startup_init(hal_millis(),
                  reset_cause == HAL_RESET_WATCHDOG,
-                 alarm_status == ALARM_CFG_ERROR);
+                 alarm_status == ALARM_CFG_ERROR || alarm_status == ALARM_CFG_WARN);
 
     // Lighting: load config from SD (or fall back to built-in), restore
     // saved config index from EEPROM, enable buck regulator.

@@ -2,16 +2,19 @@
 // Per-channel alarm input configuration parser for /ALARMS.CFG.
 //
 // File format (INI-style):
-//   [defaults]        — applies values to every channel before named overrides
+//   [defaults]        — applies values to every channel before named overrides;
+//                       processed in a first pass so its position in the file
+//                       does not matter.
 //   [CHANNEL_NAME]    — overrides for one channel (e.g. [OIL_PRESS_LOW])
 //
-// Keys (case-insensitive value for bool):
+// Keys (case-insensitive value):
 //   active_high  = yes | no | true | false | 1 | 0  (default: yes)
 //   pull         = down | up | none                  (default: down)
 //   debounce_ms  = 50-5000                           (default: per CHANNEL_TABLE)
 //
-// Per-key fallback: an unrecognised or out-of-range value is silently ignored
-// and the compiled default for that key is kept.
+// Inline ';' and '#' comments are stripped from values.
+// Per-key fallback: an unrecognised or out-of-range value is kept at its
+// compiled default and counted as a warning.
 
 #include "alarm_cfg.h"
 #include "channel_table.h"
@@ -20,7 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define ALARM_CFG_FILE_MAX  2048u
+#define ALARM_CFG_FILE_MAX  8192u
 #define DEBOUNCE_MIN_MS       50u
 #define DEBOUNCE_MAX_MS     5000u
 
@@ -33,6 +36,8 @@ static void str_lower(char *s) {
         if (*s >= 'A' && *s <= 'Z') *s += 32;
 }
 
+// Reads one line into buf (without the trailing newline), returns length.
+// Returns 0 on a blank/empty line (still advances the pointer past it).
 static int next_line(const char **pp, char *buf, int bufsz) {
     if (!**pp) return 0;
     int n = 0;
@@ -45,11 +50,6 @@ static int next_line(const char **pp, char *buf, int bufsz) {
     return n;
 }
 
-static bool parse_bool(const char *s) {
-    return strcmp(s, "yes") == 0 || strcmp(s, "true") == 0 || strcmp(s, "1") == 0;
-}
-
-// Returns true and sets *out only if the value is a recognised bool keyword.
 static bool try_parse_bool(const char *s, bool *out) {
     if (strcmp(s, "yes") == 0 || strcmp(s, "true") == 0 || strcmp(s, "1") == 0) {
         *out = true;  return true;
@@ -67,6 +67,124 @@ static bool try_parse_pull(const char *s, alarm_pull_t *out) {
     return false;
 }
 
+// Look up a section header string in CHANNEL_TABLE; returns index or -1.
+static int8_t find_channel(const char *hdr_lower) {
+    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
+        char tbl[32] = {0};
+        int  tlen = 0;
+        for (const char *p = CHANNEL_TABLE[i].name; *p && tlen < 31; p++)
+            tbl[tlen++] = *p;
+        str_lower(tbl);
+        if (strcmp(hdr_lower, tbl) == 0) return (int8_t)i;
+    }
+    return -1;
+}
+
+// Single parse pass over text.
+// defaults_pass=true  → only applies [defaults] section; no warnings counted.
+// defaults_pass=false → only applies named channel sections; counts warnings.
+static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass) {
+    typedef enum { SEC_NONE, SEC_DEFAULTS, SEC_CHANNEL } section_t;
+    section_t sec    = SEC_NONE;
+    int8_t    cur_ch = -1;
+    uint8_t   warns  = 0;
+
+    char line[128];
+    while (next_line(&text, line, sizeof(line)) || *text) {
+        if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
+
+        if (line[0] == '[') {
+            char hdr[32] = {0};
+            int  hn = 0;
+            for (int i = 1; line[i] && line[i] != ']' && hn < 31; i++)
+                hdr[hn++] = line[i];
+            hdr[hn] = '\0';
+            str_lower(hdr);
+
+            if (strcmp(hdr, "defaults") == 0) {
+                sec = SEC_DEFAULTS; cur_ch = -1;
+            } else {
+                sec = SEC_CHANNEL;
+                cur_ch = find_channel(hdr);
+                if (!defaults_pass && cur_ch < 0) warns++;  // unknown section
+            }
+            continue;
+        }
+
+        // Key-value line: skip if not in the right pass or not in a section.
+        if (defaults_pass  && sec != SEC_DEFAULTS) continue;
+        if (!defaults_pass && sec == SEC_DEFAULTS)  continue;
+
+        char *eq = strchr(line, '=');
+        if (!eq) continue;
+
+        // Key outside any section (named-sections pass only).
+        if (!defaults_pass && sec == SEC_NONE) { warns++; continue; }
+
+        // Extract and lower-case the key.
+        char key[32] = {0};
+        int  klen    = (int)(eq - line);
+        while (klen > 0 && (line[klen-1] == ' ' || line[klen-1] == '\t')) klen--;
+        if (klen > 31) klen = 31;
+        memcpy(key, line, (size_t)klen);
+        str_lower(key);
+
+        // Extract value, stripping trailing whitespace and inline ; # comments.
+        char        val[32] = {0};
+        const char *vp      = eq + 1;
+        while (*vp == ' ' || *vp == '\t') vp++;
+        int vlen = 0;
+        while (vp[vlen] && vp[vlen] != ';' && vp[vlen] != '#' && vlen < 31) vlen++;
+        while (vlen > 0 && (vp[vlen-1] == ' ' || vp[vlen-1] == '\t')) vlen--;
+        memcpy(val, vp, (size_t)vlen);
+        str_lower(val);
+
+        bool known_key = false;
+
+        if (strcmp(key, "active_high") == 0) {
+            known_key = true;
+            bool v;
+            if (try_parse_bool(val, &v)) {
+                if (sec == SEC_DEFAULTS)
+                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].active_high = v;
+                else if (cur_ch >= 0)
+                    out->ch[cur_ch].active_high = v;
+            } else {
+                if (!defaults_pass) warns++;
+            }
+        } else if (strcmp(key, "pull") == 0) {
+            known_key = true;
+            alarm_pull_t p;
+            if (try_parse_pull(val, &p)) {
+                if (sec == SEC_DEFAULTS)
+                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].pull = p;
+                else if (cur_ch >= 0)
+                    out->ch[cur_ch].pull = p;
+            } else {
+                if (!defaults_pass) warns++;
+            }
+        } else if (strcmp(key, "debounce_ms") == 0) {
+            known_key = true;
+            char *end;
+            long  v = strtol(val, &end, 10);
+            if (end == val || *end != '\0') {
+                if (!defaults_pass) warns++;       // non-numeric or empty
+            } else if (v < DEBOUNCE_MIN_MS || v > DEBOUNCE_MAX_MS) {
+                if (!defaults_pass) warns++;       // out of range (catches overflow)
+            } else {
+                uint16_t dv = (uint16_t)v;
+                if (sec == SEC_DEFAULTS)
+                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].debounce_ms = dv;
+                else if (cur_ch >= 0)
+                    out->ch[cur_ch].debounce_ms = dv;
+            }
+        }
+
+        if (!known_key && !defaults_pass) warns++;  // unknown key
+    }
+    return warns;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -79,92 +197,23 @@ void alarm_cfg_fallback(alarm_cfg_t *out) {
     }
 }
 
-void alarm_cfg_parse(const char *text, alarm_cfg_t *out) {
+uint8_t alarm_cfg_parse(const char *text, alarm_cfg_t *out) {
     alarm_cfg_fallback(out);
-    if (!text) return;
+    if (!text || !text[0]) return 0;
 
-    typedef enum { SEC_NONE, SEC_DEFAULTS, SEC_CHANNEL } section_t;
-    section_t sec    = SEC_NONE;
-    int8_t    cur_ch = -1;
+    // Two-pass: defaults first (order-independent), then named sections.
+    parse_pass(text, out, true);
+    uint8_t warns = parse_pass(text, out, false);
 
-    char line[128];
-    while (next_line(&text, line, sizeof(line)) || *text) {
-        if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
-
-        if (line[0] == '[') {
-            char hdr[32];
-            int  hn = 0;
-            for (int i = 1; line[i] && line[i] != ']' && hn < 31; i++)
-                hdr[hn++] = line[i];
-            hdr[hn] = '\0';
-            str_lower(hdr);
-
-            if (strcmp(hdr, "defaults") == 0) {
-                sec    = SEC_DEFAULTS;
-                cur_ch = -1;
-            } else {
-                sec    = SEC_CHANNEL;
-                cur_ch = -1;
-                for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-                    char tbl[32];
-                    int  tlen = 0;
-                    for (const char *p = CHANNEL_TABLE[i].name; *p && tlen < 31; p++)
-                        tbl[tlen++] = *p;
-                    tbl[tlen] = '\0';
-                    str_lower(tbl);
-                    if (strcmp(hdr, tbl) == 0) { cur_ch = (int8_t)i; break; }
-                }
-            }
-            continue;
-        }
-
-        char *eq = strchr(line, '=');
-        if (!eq) continue;
-
-        char key[32] = {0};
-        int  klen    = (int)(eq - line);
-        while (klen > 0 && (line[klen-1] == ' ' || line[klen-1] == '\t')) klen--;
-        if (klen >= 32) klen = 31;
-        memcpy(key, line, (size_t)klen);
-        str_lower(key);
-
-        char val[32] = {0};
-        const char *vp = eq + 1;
-        while (*vp == ' ' || *vp == '\t') vp++;
-        int vlen = 0;
-        while (vp[vlen] && vlen < 31) vlen++;
-        memcpy(val, vp, (size_t)vlen);
-        str_lower(val);
-
-        if (sec == SEC_DEFAULTS) {
-            if (strcmp(key, "active_high") == 0) {
-                bool v;
-                if (try_parse_bool(val, &v))
-                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].active_high = v;
-            } else if (strcmp(key, "pull") == 0) {
-                alarm_pull_t p;
-                if (try_parse_pull(val, &p))
-                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].pull = p;
-            } else if (strcmp(key, "debounce_ms") == 0) {
-                uint16_t v = (uint16_t)atoi(val);
-                if (v >= DEBOUNCE_MIN_MS && v <= DEBOUNCE_MAX_MS)
-                    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) out->ch[i].debounce_ms = v;
-            }
-        } else if (sec == SEC_CHANNEL && cur_ch >= 0) {
-            if (strcmp(key, "active_high") == 0) {
-                bool v;
-                if (try_parse_bool(val, &v)) out->ch[cur_ch].active_high = v;
-            } else if (strcmp(key, "pull") == 0) {
-                alarm_pull_t p;
-                if (try_parse_pull(val, &p)) out->ch[cur_ch].pull = p;
-            } else if (strcmp(key, "debounce_ms") == 0) {
-                uint16_t v = (uint16_t)atoi(val);
-                if (v >= DEBOUNCE_MIN_MS && v <= DEBOUNCE_MAX_MS)
-                    out->ch[cur_ch].debounce_ms = v;
-                // out-of-range: silently keep per-key fallback (already set by fallback())
-            }
-        }
+    // Polarity mismatch: open wire would drive the pin to the alarm state.
+    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
+        bool         ah = out->ch[i].active_high;
+        alarm_pull_t p  = out->ch[i].pull;
+        if ((ah && p == ALARM_PULL_UP) || (!ah && p == ALARM_PULL_DOWN))
+            warns++;
     }
+
+    return warns;
 }
 
 alarm_cfg_status_t alarm_cfg_load(alarm_cfg_t *out) {
@@ -180,18 +229,18 @@ alarm_cfg_status_t alarm_cfg_load(alarm_cfg_t *out) {
         return ALARM_CFG_NO_FILE;
     }
     if (len == 0) {
-        // Empty file — use fallback silently, same as absent.
         alarm_cfg_fallback(out);
         return ALARM_CFG_NO_FILE;
     }
-    alarm_cfg_parse(s_buf, out);
-    return ALARM_CFG_OK;
+    uint8_t warns = alarm_cfg_parse(s_buf, out);
+    return (warns > 0) ? ALARM_CFG_WARN : ALARM_CFG_OK;
 }
 
 void alarm_cfg_dump(const alarm_cfg_t *cfg, alarm_cfg_status_t status) {
-    const char *src = status == ALARM_CFG_OK      ? "/ALARMS.CFG"          :
-                      status == ALARM_CFG_NO_FILE  ? "compiled defaults"    :
-                                                     "ERROR-compiled defaults";
+    const char *src = status == ALARM_CFG_OK     ? "/ALARMS.CFG"           :
+                      status == ALARM_CFG_WARN   ? "/ALARMS.CFG (warnings)" :
+                      status == ALARM_CFG_NO_FILE ? "compiled defaults"     :
+                                                    "ERROR-compiled defaults";
     char line[72];
     int  n = snprintf(line, sizeof(line), "ALARMS CFG (%s):\r\n", src);
     hal_log_write((const uint8_t *)line, (size_t)n);
