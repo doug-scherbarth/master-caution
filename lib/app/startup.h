@@ -24,6 +24,11 @@ bool startup_active(void);
 // Accept ACK button press — only acts during the final ACK_WAIT phase.
 void startup_on_button_press(uint32_t now_ms);
 
+// Called by app_tick whenever any alarm is pending during startup.
+// Ends the ACK_WAIT phase immediately so the alarm owns the LED.
+// No-op outside ACK_WAIT.
+void startup_on_alarm_pending(uint32_t now_ms);
+
 void startup_tick(uint32_t now_ms);
 
 #endif // STARTUP_H

@@ -102,15 +102,18 @@ void app_tick(void) {
     // HAL_LED_AUX is not wired on the v1.4 board; hal_set_led_duty is a no-op for it.
     hal_set_led_duty(HAL_LED_AUX, aux_led_compute_duty(dimmer_get_norm_q12()));
 
+    // Alarm engine always runs — startup and test mode only borrow the LED/audio.
+    alarm_engine_tick(now, g_deb_ch);
+
     if (startup_active()) {
         if (pressed) startup_on_button_press(now);
+        if (alarm_engine_any_pending_ack()) startup_on_alarm_pending(now);
         startup_tick(now);
     } else if (test_mode_active()) {
         test_mode_tick(now);
     } else {
         if (pressed)      alarm_engine_on_button_press(now);
         if (long_pressed) test_mode_trigger(now);
-        alarm_engine_tick(now, g_deb_ch);
         audio_queue_tick(now);
 
         led_drive_t drive;

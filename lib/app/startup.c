@@ -34,10 +34,12 @@ typedef enum {
 #define SD_ERR_FLASH_HALF_MS   100u   // 5 Hz red SD-error flash
 #define SD_ERR_DURATION_MS    5000u
 #define FLASH_HALF_MS          250u   // 2 Hz green ACK flash
+#define ACK_TIMEOUT_MS        10000u  // auto-complete ACK_WAIT after 10 s
 
 static ss_state_t g_state;
 static uint32_t   g_phase_start;
 static uint32_t   g_flash_last;
+static uint32_t   g_ack_wait_start;
 static bool       g_flash_on;
 static bool       g_sd_ok;
 static bool       g_ch_fault;     // set at white-end: channel asserted OR cfg_fault
@@ -89,8 +91,9 @@ static void enter(ss_state_t s, uint32_t now_ms) {
         rgb(4095, 0, 0);
         break;
     case SS_ACK_WAIT:
-        g_flash_on   = true;
-        g_flash_last = now_ms;
+        g_ack_wait_start = now_ms;
+        g_flash_on       = true;
+        g_flash_last     = now_ms;
         rgb(0, 4095, 0);
         break;
     case SS_DONE:
@@ -126,6 +129,10 @@ void startup_init(uint32_t now_ms, bool skip_lamp_test, bool cfg_fault) {
 bool startup_active(void) { return g_state != SS_DONE; }
 
 void startup_on_button_press(uint32_t now_ms) {
+    if (g_state == SS_ACK_WAIT) enter(SS_DONE, now_ms);
+}
+
+void startup_on_alarm_pending(uint32_t now_ms) {
     if (g_state == SS_ACK_WAIT) enter(SS_DONE, now_ms);
 }
 
@@ -185,6 +192,8 @@ void startup_tick(uint32_t now_ms) {
             g_flash_last = now_ms;
             hal_set_led_duty(HAL_LED_GREEN, g_flash_on ? 4095 : 0);
         }
+        if ((uint32_t)(now_ms - g_ack_wait_start) >= ACK_TIMEOUT_MS)
+            enter(SS_DONE, now_ms);
         break;
     case SS_DONE: break;
     }

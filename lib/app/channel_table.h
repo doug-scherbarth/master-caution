@@ -28,8 +28,9 @@ enum channel_id {
 };
 
 typedef struct {
-    const char *name;          // for log/debug
-    uint16_t    debounce_ms;   // qualification time per spec §6.2
+    const char *name;              // for log/debug
+    uint16_t    debounce_ms;       // qualification time per spec §6.2
+    bool        expected_at_rest;  // true → asserted on a cold engine; skip CH_FAULT
 } channel_descriptor_t;
 
 extern const channel_descriptor_t CHANNEL_TABLE[CHANNEL_COUNT];
