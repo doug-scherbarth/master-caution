@@ -22,11 +22,7 @@ void dimmer_init(void);
 void dimmer_tick(uint32_t now_ms, uint16_t dim_raw, uint16_t bus_raw);
 
 // Normalised brightness in Q12 (0 = full dim, 4095 = full bright).
-// Returns 2048 (50%) when the soft fail-safe is active.
+// Returns 0 when ratio is below the low dead band.
 uint16_t dimmer_get_norm_q12(void);
-
-// True if the ratio has been stuck near 0 long enough to trigger the
-// soft fail-safe (broken dimmer wire → hold at 50%).
-bool dimmer_failsafe_active(void);
 
 #endif // DIMMER_H

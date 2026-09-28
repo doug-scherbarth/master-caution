@@ -25,7 +25,6 @@ void tearDown(void) {}
 
 void test_initial_state_zero(void) {
     TEST_ASSERT_EQUAL(0, dimmer_get_norm_q12());
-    TEST_ASSERT_FALSE(dimmer_failsafe_active());
 }
 
 // --- IIR convergence --------------------------------------------------
@@ -71,46 +70,6 @@ void test_deadband_at_high_end_clamps_to_max(void) {
     TEST_ASSERT_EQUAL(4095, dimmer_get_norm_q12());
 }
 
-// --- Soft fail-safe (spec §4.7) -------------------------------------
-
-void test_failsafe_does_not_trigger_below_5s(void) {
-    drive(0, 4000, 0);   // 4s of zero
-    TEST_ASSERT_FALSE(dimmer_failsafe_active());
-}
-
-void test_failsafe_triggers_after_5s_of_zero(void) {
-    drive(0, 6000, 0);
-    TEST_ASSERT_TRUE(dimmer_failsafe_active());
-    TEST_ASSERT_EQUAL(2048, dimmer_get_norm_q12());  // 50%
-}
-
-void test_failsafe_recovers_when_input_returns(void) {
-    drive(0, 6000, 0);
-    TEST_ASSERT_TRUE(dimmer_failsafe_active());
-
-    drive(6000, 1000, 2000);
-    TEST_ASSERT_FALSE(dimmer_failsafe_active());
-}
-
-void test_brief_zero_does_not_trigger_failsafe(void) {
-    uint32_t t = 0;
-    t = drive(t, 1000, 2000);   // 1s stable
-    t = drive(t, 2000, 0);      // 2s of zero (below 5s threshold)
-    t = drive(t, 1000, 2000);   // recovers
-    TEST_ASSERT_FALSE(dimmer_failsafe_active());
-}
-
-void test_failsafe_threshold_allows_small_noise(void) {
-    // raw=4 is below FAILSAFE_RAW_THRESHOLD (5) — should still trigger eventually
-    drive(0, 6000, 4);
-    TEST_ASSERT_TRUE(dimmer_failsafe_active());
-}
-
-void test_failsafe_does_not_trigger_just_above_threshold(void) {
-    drive(0, 6000, 6);  // raw=6 > threshold
-    TEST_ASSERT_FALSE(dimmer_failsafe_active());
-}
-
 // --- Test runner -----------------------------------------------------
 
 int main(void) {
@@ -121,11 +80,5 @@ int main(void) {
     RUN_TEST(test_rate_limited_to_50hz);
     RUN_TEST(test_deadband_at_low_end_clamps_to_zero);
     RUN_TEST(test_deadband_at_high_end_clamps_to_max);
-    RUN_TEST(test_failsafe_does_not_trigger_below_5s);
-    RUN_TEST(test_failsafe_triggers_after_5s_of_zero);
-    RUN_TEST(test_failsafe_recovers_when_input_returns);
-    RUN_TEST(test_brief_zero_does_not_trigger_failsafe);
-    RUN_TEST(test_failsafe_threshold_allows_small_noise);
-    RUN_TEST(test_failsafe_does_not_trigger_just_above_threshold);
     return UNITY_END();
 }
