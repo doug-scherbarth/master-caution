@@ -18,6 +18,11 @@
 // Mid-range value safely inside the neutral zone
 #define MID 128u
 
+// Hysteresis: 5 percentage points, rounded (must match implementation)
+#define HYST      ((uint8_t)((5u * 255u + 50u) / 100u))  // 13
+#define LOW_HYST  ((uint8_t)(LOW  + HYST))                // 64
+#define HIGH_HYST ((uint8_t)(HIGH - HYST))                // 191
+
 void setUp(void)    { dimmer_gesture_init(LOW_PCT, HIGH_PCT, T_OUT_MS); }
 void tearDown(void) {}
 
@@ -31,63 +36,57 @@ void test_stable_mid_no_gesture(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Dip gesture (cross below LOW, return above LOW, within timeout)
+// Dip gesture (cross below LOW, return above LOW+HYST, within timeout)
 // ---------------------------------------------------------------------------
 
 void test_dip_fires_on_return(void) {
-    dimmer_gesture_tick(0, MID);           // idle in neutral
-    dimmer_gesture_tick(10, LOW - 1);      // cross below LOW — arm
-    bool fired = dimmer_gesture_tick(20, LOW);  // return to LOW — gesture!
+    dimmer_gesture_tick(0, MID);                         // seed neutral
+    dimmer_gesture_tick(10, LOW - 1);                    // cross below LOW — arm
+    bool fired = dimmer_gesture_tick(20, LOW_HYST);      // return past hysteresis — gesture!
     TEST_ASSERT_TRUE(fired);
 }
 
 void test_dip_fires_once_not_repeatedly(void) {
     dimmer_gesture_tick(0,  MID);
     dimmer_gesture_tick(10, LOW - 1);
-    bool first  = dimmer_gesture_tick(20, LOW);   // gesture fires
-    bool second = dimmer_gesture_tick(30, MID);   // back in neutral, no repeat
+    bool first  = dimmer_gesture_tick(20, LOW_HYST);  // gesture fires
+    bool second = dimmer_gesture_tick(30, MID);       // back in neutral, no repeat
     TEST_ASSERT_TRUE(first);
     TEST_ASSERT_FALSE(second);
 }
 
 void test_dip_timeout_no_gesture(void) {
     dimmer_gesture_tick(0, MID);
-    dimmer_gesture_tick(10, LOW - 1);              // arm
+    dimmer_gesture_tick(10, LOW - 1);                              // arm
     // stay below LOW past the timeout
     bool fired = dimmer_gesture_tick(10 + T_OUT + 1, LOW - 1);
     TEST_ASSERT_FALSE(fired);
-    // now return — still no gesture (already timed out)
-    fired = dimmer_gesture_tick(10 + T_OUT + 2, LOW);
+    // return past hysteresis — already timed out, no gesture
+    fired = dimmer_gesture_tick(10 + T_OUT + 2, LOW_HYST);
     TEST_ASSERT_FALSE(fired);
 }
 
-void test_dip_return_exactly_at_low_threshold(void) {
+void test_dip_return_at_hysteresis_edge(void) {
     dimmer_gesture_tick(0,  MID);
     dimmer_gesture_tick(10, LOW - 1);
-    // Return to exactly LOW (>= LOW threshold)
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, LOW));
-}
-
-void test_dip_from_zero_ratio(void) {
-    // ratio starts at 0 (already below LOW) from boot — should arm immediately
-    dimmer_gesture_tick(0, 0);
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(100, MID));
+    // Return to exactly LOW+HYST (the minimum that fires)
+    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, LOW_HYST));
 }
 
 // ---------------------------------------------------------------------------
-// Bump gesture (cross above HIGH, return below HIGH, within timeout)
+// Bump gesture (cross above HIGH, return below HIGH-HYST, within timeout)
 // ---------------------------------------------------------------------------
 
 void test_bump_fires_on_return(void) {
     dimmer_gesture_tick(0, MID);
     dimmer_gesture_tick(10, HIGH + 1);
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, HIGH));
+    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, HIGH_HYST));
 }
 
 void test_bump_fires_once_not_repeatedly(void) {
     dimmer_gesture_tick(0, MID);
     dimmer_gesture_tick(10, HIGH + 1);
-    bool first  = dimmer_gesture_tick(20, HIGH);
+    bool first  = dimmer_gesture_tick(20, HIGH_HYST);
     bool second = dimmer_gesture_tick(30, MID);
     TEST_ASSERT_TRUE(first);
     TEST_ASSERT_FALSE(second);
@@ -96,14 +95,15 @@ void test_bump_fires_once_not_repeatedly(void) {
 void test_bump_timeout_no_gesture(void) {
     dimmer_gesture_tick(0, MID);
     dimmer_gesture_tick(10, HIGH + 1);
-    dimmer_gesture_tick(10 + T_OUT + 1, HIGH + 1);  // still above HIGH, timed out
-    TEST_ASSERT_FALSE(dimmer_gesture_tick(10 + T_OUT + 2, HIGH));
+    dimmer_gesture_tick(10 + T_OUT + 1, HIGH + 1);               // still above HIGH, timed out
+    TEST_ASSERT_FALSE(dimmer_gesture_tick(10 + T_OUT + 2, HIGH_HYST));
 }
 
-void test_bump_return_exactly_at_high_threshold(void) {
+void test_bump_return_at_hysteresis_edge(void) {
     dimmer_gesture_tick(0, MID);
     dimmer_gesture_tick(10, HIGH + 1);
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, HIGH));
+    // Return to exactly HIGH-HYST (the maximum that fires)
+    TEST_ASSERT_TRUE(dimmer_gesture_tick(20, HIGH_HYST));
 }
 
 // ---------------------------------------------------------------------------
@@ -113,18 +113,18 @@ void test_bump_return_exactly_at_high_threshold(void) {
 
 void test_dip_return_at_exactly_timeout_still_fires(void) {
     dimmer_gesture_tick(1000, MID);
-    dimmer_gesture_tick(1010, LOW - 1);               // arm at t=1010
+    dimmer_gesture_tick(1010, LOW - 1);                            // arm at t=1010
     // return at exactly arm_time + T_OUT (not yet expired)
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(1010 + T_OUT, LOW));
+    TEST_ASSERT_TRUE(dimmer_gesture_tick(1010 + T_OUT, LOW_HYST));
 }
 
 void test_dip_expired_one_ms_past_timeout(void) {
     dimmer_gesture_tick(1000, MID);
     dimmer_gesture_tick(1010, LOW - 1);
-    // tick that expires the arm (still below LOW — clears to IDLE)
+    // tick that expires the arm (still below LOW — clears to LOW state)
     dimmer_gesture_tick(1010 + T_OUT + 1, LOW - 1);
-    // return: already idle, no gesture
-    TEST_ASSERT_FALSE(dimmer_gesture_tick(1010 + T_OUT + 2, LOW));
+    // return past hysteresis: already expired, no gesture
+    TEST_ASSERT_FALSE(dimmer_gesture_tick(1010 + T_OUT + 2, LOW_HYST));
 }
 
 // ---------------------------------------------------------------------------
@@ -135,13 +135,13 @@ void test_dip_rearms_after_timeout(void) {
     // First attempt — let it timeout
     dimmer_gesture_tick(0,  MID);
     dimmer_gesture_tick(10, LOW - 1);
-    dimmer_gesture_tick(10 + T_OUT + 5, LOW - 1);  // expire
-    dimmer_gesture_tick(10 + T_OUT + 6, MID);       // back to neutral
+    dimmer_gesture_tick(10 + T_OUT + 5, LOW - 1);   // expire
+    dimmer_gesture_tick(10 + T_OUT + 6, MID);        // back to neutral via LOW_HYST
 
     // Second attempt — quick dip
     dimmer_gesture_tick(5000, MID);
     dimmer_gesture_tick(5010, LOW - 1);
-    TEST_ASSERT_TRUE(dimmer_gesture_tick(5020, LOW));
+    TEST_ASSERT_TRUE(dimmer_gesture_tick(5020, LOW_HYST));
 }
 
 // ---------------------------------------------------------------------------
@@ -152,12 +152,12 @@ void test_two_gestures_in_sequence(void) {
     // First gesture: dip
     dimmer_gesture_tick(0,   MID);
     dimmer_gesture_tick(10,  LOW - 1);
-    bool g1 = dimmer_gesture_tick(20, LOW);
+    bool g1 = dimmer_gesture_tick(20, LOW_HYST);
 
     // Second gesture: bump (some time later)
     dimmer_gesture_tick(1000, MID);
     dimmer_gesture_tick(1010, HIGH + 1);
-    bool g2 = dimmer_gesture_tick(1020, HIGH);
+    bool g2 = dimmer_gesture_tick(1020, HIGH_HYST);
 
     TEST_ASSERT_TRUE(g1);
     TEST_ASSERT_TRUE(g2);
@@ -174,12 +174,11 @@ int main(void) {
     RUN_TEST(test_dip_fires_on_return);
     RUN_TEST(test_dip_fires_once_not_repeatedly);
     RUN_TEST(test_dip_timeout_no_gesture);
-    RUN_TEST(test_dip_return_exactly_at_low_threshold);
-    RUN_TEST(test_dip_from_zero_ratio);
+    RUN_TEST(test_dip_return_at_hysteresis_edge);
     RUN_TEST(test_bump_fires_on_return);
     RUN_TEST(test_bump_fires_once_not_repeatedly);
     RUN_TEST(test_bump_timeout_no_gesture);
-    RUN_TEST(test_bump_return_exactly_at_high_threshold);
+    RUN_TEST(test_bump_return_at_hysteresis_edge);
     RUN_TEST(test_dip_return_at_exactly_timeout_still_fires);
     RUN_TEST(test_dip_expired_one_ms_past_timeout);
     RUN_TEST(test_dip_rearms_after_timeout);
