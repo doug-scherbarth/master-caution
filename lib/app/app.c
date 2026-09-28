@@ -121,6 +121,8 @@ void app_tick(void) {
                             alarm_engine_max_active_severity(),
                             alarm_engine_any_pending_ack(),
                             dimmer_get_norm_q12(),
+                            g_light_cfg.mc_floor_ack_q12,
+                            g_light_cfg.mc_floor_pending_q12,
                             &drive);
         hal_set_led_duty(HAL_LED_RED,   drive.red);
         hal_set_led_duty(HAL_LED_GREEN, drive.green);

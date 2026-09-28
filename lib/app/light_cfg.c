@@ -12,6 +12,11 @@
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+static uint16_t pct_to_floor_q12(const uint8_t *lut, uint8_t pct) {
+    uint8_t b = (uint8_t)((uint32_t)pct * 255u / 100u);
+    return (uint16_t)((uint32_t)lut[b] * 4095u / 255u);
+}
+
 static void build_gamma_lut(uint8_t *lut, float gamma) {
     lut[0] = 0;
     for (int i = 1; i < 255; i++) {
@@ -55,9 +60,11 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
     out->mA_per_channel      = 20;
     out->quiescent_mA        = 1;
     out->max_current_mA      = 2000;
-    out->gesture_low_pct     = 20;
-    out->gesture_high_pct    = 80;
-    out->gesture_timeout_ms  = 2000;
+    out->gesture_low_pct      = 20;
+    out->gesture_high_pct     = 80;
+    out->gesture_timeout_ms   = 2000;
+    out->mc_floor_ack_pct     = 15;
+    out->mc_floor_pending_pct = 35;
     float gamma = 2.2f;
 
     typedef enum { SEC_NONE, SEC_GLOBAL, SEC_CONFIG } section_t;
@@ -130,6 +137,8 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
             else if (strcmp(key, "gesture_low_pct")     == 0) { int v = atoi(vp); out->gesture_low_pct    = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
             else if (strcmp(key, "gesture_high_pct")    == 0) { int v = atoi(vp); out->gesture_high_pct   = (uint8_t)(v < 1 ? 1 : v > 99 ? 99 : v); }
             else if (strcmp(key, "gesture_timeout_ms")  == 0) out->gesture_timeout_ms = (uint16_t)atoi(vp);
+            else if (strcmp(key, "mc_floor_ack_pct")     == 0) { int v = atoi(vp); out->mc_floor_ack_pct     = (uint8_t)(v < 1 ? 1 : v > 100 ? 100 : v); }
+            else if (strcmp(key, "mc_floor_pending_pct") == 0) { int v = atoi(vp); out->mc_floor_pending_pct = (uint8_t)(v < 1 ? 1 : v > 100 ? 100 : v); }
         } else if (sec == SEC_CONFIG && cur_cfg) {
             if (strcmp(key, "start") == 0) {
                 // start= always begins a new segment
@@ -164,6 +173,14 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
 
     build_gamma_lut(out->gamma_lut, gamma);
 
+    // Validate floors: pending must be >= ack; revert both to defaults if not.
+    if (out->mc_floor_pending_pct < out->mc_floor_ack_pct) {
+        out->mc_floor_ack_pct     = 15;
+        out->mc_floor_pending_pct = 35;
+    }
+    out->mc_floor_ack_q12     = pct_to_floor_q12(out->gamma_lut, out->mc_floor_ack_pct);
+    out->mc_floor_pending_q12 = pct_to_floor_q12(out->gamma_lut, out->mc_floor_pending_pct);
+
     return out->n_configs > 0;
 }
 
@@ -173,10 +190,14 @@ void light_cfg_fallback(light_cfg_t *out) {
     out->mA_per_channel      = 20;
     out->quiescent_mA        = 1;
     out->max_current_mA      = 2000;
-    out->gesture_low_pct     = 20;
-    out->gesture_high_pct    = 80;
-    out->gesture_timeout_ms  = 2000;
+    out->gesture_low_pct      = 20;
+    out->gesture_high_pct     = 80;
+    out->gesture_timeout_ms   = 2000;
+    out->mc_floor_ack_pct     = 15;
+    out->mc_floor_pending_pct = 35;
     build_gamma_lut(out->gamma_lut, 2.2f);
+    out->mc_floor_ack_q12     = pct_to_floor_q12(out->gamma_lut, out->mc_floor_ack_pct);
+    out->mc_floor_pending_q12 = pct_to_floor_q12(out->gamma_lut, out->mc_floor_pending_pct);
 
     out->n_configs = 1;
     strncpy(out->configs[0].name, "default", LIGHT_NAME_LEN - 1);

@@ -2,11 +2,6 @@
 #include "led_controller.h"
 #include <string.h>
 
-// 15% of 4095 = 614 — acked/steady alarms (spec §4.7 MC_FLOOR)
-#define MC_FLOOR_Q12         614u
-// 35% of 4095 = 1433 — unacknowledged (flashing) alarms; ensures visibility at low cabin dimmer
-#define MC_FLOOR_PENDING_Q12 1433u
-
 // 2 Hz flash: 250 ms ON, 250 ms OFF (spec §4.2)
 #define FLASH_HALF_MS     250u
 
@@ -18,6 +13,8 @@ void led_controller_tick(uint32_t     now_ms,
                          severity_t   severity,
                          bool         any_pending,
                          uint16_t     dimmer_norm_q12,
+                         uint16_t     floor_ack_q12,
+                         uint16_t     floor_pending_q12,
                          led_drive_t *out) {
     memset(out, 0, sizeof(*out));
 
@@ -25,7 +22,7 @@ void led_controller_tick(uint32_t     now_ms,
 
     // Brightness floor: higher for unacknowledged (flashing) alarms so they
     // remain visible at minimum cabin dimmer, lower for acked/steady.
-    uint16_t floor_q12 = any_pending ? MC_FLOOR_PENDING_Q12 : MC_FLOOR_Q12;
+    uint16_t floor_q12 = any_pending ? floor_pending_q12 : floor_ack_q12;
     uint16_t lit_duty  = (dimmer_norm_q12 < floor_q12) ? floor_q12 : dimmer_norm_q12;
 
     // Flash modulation: ON during first half of each 500 ms cycle.

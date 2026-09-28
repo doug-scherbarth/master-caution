@@ -40,9 +40,14 @@ typedef struct {
     // gamma_lut[i] = round(pow(i/255, gamma) * 255); built at parse time.
     uint8_t        gamma_lut[256];
     // Dimmer gesture thresholds — tunable without recompiling.
-    uint8_t        gesture_low_pct;    // dip arms below this % of full range (0-100)
-    uint8_t        gesture_high_pct;   // bump arms above this % of full range (0-100)
-    uint16_t       gesture_timeout_ms; // ms to complete gesture before it cancels
+    uint8_t        gesture_low_pct;       // dip arms below this % of full range (0-100)
+    uint8_t        gesture_high_pct;      // bump arms above this % of full range (0-100)
+    uint16_t       gesture_timeout_ms;    // ms to complete gesture before it cancels
+    // MC button LED floors — perceived percent, gamma-mapped to Q12 duty at runtime.
+    uint8_t        mc_floor_ack_pct;      // perceived % floor for acked/steady, 1-100 (default 15)
+    uint8_t        mc_floor_pending_pct;  // perceived % floor for pending/flashing, 1-100 (default 35)
+    uint16_t       mc_floor_ack_q12;      // gamma-mapped Q12 floor, acked alarms
+    uint16_t       mc_floor_pending_q12;  // gamma-mapped Q12 floor, pending alarms
     uint8_t        n_configs;
     light_config_t configs[LIGHT_MAX_CONFIGS];
 } light_cfg_t;

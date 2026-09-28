@@ -6,8 +6,10 @@
 #include <unity.h>
 #include "led_controller.h"
 
-#define MC_FLOOR_Q12         614   // acked/steady floor (15%)
-#define MC_FLOOR_PENDING_Q12 1433  // unacknowledged (flashing) floor (35%)
+// Gamma=2.2 mapped floors: 15% → brightness_u8=38 → lut=4 → q12=64
+//                          35% → brightness_u8=89 → lut=25 → q12=401
+#define FLOOR_ACK_Q12     64u
+#define FLOOR_PENDING_Q12 401u
 
 static led_drive_t out;
 
@@ -20,7 +22,7 @@ void tearDown(void) {}
 // --- No alarms ----------------------------------------------------------
 
 void test_no_alarm_all_off(void) {
-    led_controller_tick(0, SEV_NONE, false, 4095, &out);
+    led_controller_tick(0, SEV_NONE, false, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
     TEST_ASSERT_EQUAL(0, out.green);
     TEST_ASSERT_EQUAL(0, out.blue);
@@ -28,7 +30,7 @@ void test_no_alarm_all_off(void) {
 
 void test_no_alarm_pending_flag_ignored(void) {
     // SEV_NONE wins regardless of any_pending
-    led_controller_tick(0, SEV_NONE, true, 4095, &out);
+    led_controller_tick(0, SEV_NONE, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
     TEST_ASSERT_EQUAL(0, out.green);
 }
@@ -36,21 +38,21 @@ void test_no_alarm_pending_flag_ignored(void) {
 // --- Severity → color (acknowledged, full bright) ----------------------
 
 void test_high_acked_steady_red(void) {
-    led_controller_tick(0, SEV_HIGH, false, 4095, &out);
+    led_controller_tick(0, SEV_HIGH, false, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(4095, out.red);
     TEST_ASSERT_EQUAL(0, out.green);
     TEST_ASSERT_EQUAL(0, out.blue);
 }
 
 void test_med_acked_steady_amber(void) {
-    led_controller_tick(0, SEV_MED, false, 4095, &out);
+    led_controller_tick(0, SEV_MED, false, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(4095, out.red);
     TEST_ASSERT_EQUAL(4095, out.green);
     TEST_ASSERT_EQUAL(0, out.blue);
 }
 
 void test_low_acked_steady_green(void) {
-    led_controller_tick(0, SEV_LOW, false, 4095, &out);
+    led_controller_tick(0, SEV_LOW, false, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
     TEST_ASSERT_EQUAL(4095, out.green);
     TEST_ASSERT_EQUAL(0, out.blue);
@@ -59,12 +61,12 @@ void test_low_acked_steady_green(void) {
 // --- Flash modulation (pending) ---------------------------------------
 
 void test_pending_at_t0_is_on(void) {
-    led_controller_tick(0, SEV_HIGH, true, 4095, &out);
+    led_controller_tick(0, SEV_HIGH, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(4095, out.red);
 }
 
 void test_pending_at_t250_is_off(void) {
-    led_controller_tick(250, SEV_HIGH, true, 4095, &out);
+    led_controller_tick(250, SEV_HIGH, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
 }
 
@@ -73,7 +75,7 @@ void test_flash_cycle_full_period(void) {
     const uint32_t pts[] = { 0, 249, 250, 499, 500, 749, 750 };
     const bool     on[]  = { 1,    1,   0,   0,   1,   1,   0 };
     for (size_t i = 0; i < sizeof(pts)/sizeof(pts[0]); i++) {
-        led_controller_tick(pts[i], SEV_HIGH, true, 4095, &out);
+        led_controller_tick(pts[i], SEV_HIGH, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
         if (on[i]) {
             TEST_ASSERT_EQUAL_MESSAGE(4095, out.red, "expected ON");
         } else {
@@ -83,11 +85,11 @@ void test_flash_cycle_full_period(void) {
 }
 
 void test_pending_amber_both_cathodes_modulated_in_phase(void) {
-    led_controller_tick(0, SEV_MED, true, 4095, &out);
+    led_controller_tick(0, SEV_MED, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(4095, out.red);
     TEST_ASSERT_EQUAL(4095, out.green);
 
-    led_controller_tick(250, SEV_MED, true, 4095, &out);
+    led_controller_tick(250, SEV_MED, true, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
     TEST_ASSERT_EQUAL(0, out.green);
 }
@@ -95,69 +97,69 @@ void test_pending_amber_both_cathodes_modulated_in_phase(void) {
 // --- Brightness floor (spec §4.7) ------------------------------------
 
 void test_dimmer_zero_clamped_to_floor(void) {
-    led_controller_tick(0, SEV_HIGH, false, 0, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);
+    led_controller_tick(0, SEV_HIGH, false, 0, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_ACK_Q12, out.red);
 }
 
 void test_dimmer_just_below_floor_clamped(void) {
-    led_controller_tick(0, SEV_HIGH, false, MC_FLOOR_Q12 - 1, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);
+    led_controller_tick(0, SEV_HIGH, false, FLOOR_ACK_Q12 - 1, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_ACK_Q12, out.red);
 }
 
 void test_dimmer_at_floor_passes_through(void) {
-    led_controller_tick(0, SEV_HIGH, false, MC_FLOOR_Q12, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);
+    led_controller_tick(0, SEV_HIGH, false, FLOOR_ACK_Q12, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_ACK_Q12, out.red);
 }
 
 void test_dimmer_above_floor_passes_through(void) {
-    led_controller_tick(0, SEV_HIGH, false, 2048, &out);
+    led_controller_tick(0, SEV_HIGH, false, 2048, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(2048, out.red);
 }
 
 void test_dimmer_full_passes_through(void) {
-    led_controller_tick(0, SEV_HIGH, false, 4095, &out);
+    led_controller_tick(0, SEV_HIGH, false, 4095, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(4095, out.red);
 }
 
 // --- Combined: dimmer + flash ---------------------------------------
 
 void test_pending_flash_uses_dimmed_duty_in_on_phase(void) {
-    led_controller_tick(0, SEV_LOW, true, 1500, &out);
+    led_controller_tick(0, SEV_LOW, true, 1500, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(1500, out.green);  // ON, dimmer pass-through
 
-    led_controller_tick(250, SEV_LOW, true, 1500, &out);
+    led_controller_tick(250, SEV_LOW, true, 1500, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.green);     // OFF
 }
 
 void test_pending_flash_with_dim_below_floor_uses_pending_floor(void) {
-    // ON phase at dimmer=0: clamped to higher pending floor (35%)
-    led_controller_tick(0, SEV_HIGH, true, 0, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_PENDING_Q12, out.red);
+    // ON phase at dimmer=0: clamped to higher pending floor (35% gamma-mapped)
+    led_controller_tick(0, SEV_HIGH, true, 0, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_PENDING_Q12, out.red);
 
     // OFF phase stays dark regardless of floor
-    led_controller_tick(250, SEV_HIGH, true, 0, &out);
+    led_controller_tick(250, SEV_HIGH, true, 0, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(0, out.red);
 }
 
 void test_acked_alarm_uses_lower_floor(void) {
-    // Acked alarm (any_pending=false) uses 15% floor, not 35%
-    led_controller_tick(0, SEV_HIGH, false, 0, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_Q12, out.red);
+    // Acked alarm (any_pending=false) uses 15% gamma floor, not 35%
+    led_controller_tick(0, SEV_HIGH, false, 0, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_ACK_Q12, out.red);
 }
 
 void test_pending_floor_above_acked_floor(void) {
-    TEST_ASSERT_GREATER_THAN(MC_FLOOR_Q12, MC_FLOOR_PENDING_Q12);
+    TEST_ASSERT_GREATER_THAN(FLOOR_ACK_Q12, FLOOR_PENDING_Q12);
 }
 
 void test_pending_dimmer_between_floors_uses_pending_floor(void) {
-    // dimmer = 800 (above acked 15% but below pending 35%) → should clamp to pending floor
-    led_controller_tick(0, SEV_HIGH, true, 800, &out);
-    TEST_ASSERT_EQUAL(MC_FLOOR_PENDING_Q12, out.red);
+    // dimmer=200 (above acked 64 but below pending 401) → should clamp to pending floor
+    led_controller_tick(0, SEV_HIGH, true, 200, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
+    TEST_ASSERT_EQUAL(FLOOR_PENDING_Q12, out.red);
 }
 
 void test_pending_dimmer_above_pending_floor_passes_through(void) {
     // dimmer above both floors → passes through unchanged
-    led_controller_tick(0, SEV_HIGH, true, 2000, &out);
+    led_controller_tick(0, SEV_HIGH, true, 2000, FLOOR_ACK_Q12, FLOOR_PENDING_Q12, &out);
     TEST_ASSERT_EQUAL(2000, out.red);
 }
 

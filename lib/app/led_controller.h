@@ -27,6 +27,8 @@ void led_controller_tick(uint32_t     now_ms,
                          severity_t   severity,
                          bool         any_pending,
                          uint16_t     dimmer_norm_q12,
+                         uint16_t     floor_ack_q12,
+                         uint16_t     floor_pending_q12,
                          led_drive_t *out);
 
 #endif // LED_CONTROLLER_H
