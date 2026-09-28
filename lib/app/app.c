@@ -129,18 +129,14 @@ void app_tick(void) {
 
     ring_log_tick();
 
-    // Dimmer gesture uses raw ratiometric ADC (no IIR) to detect sharp dips/bumps.
-    uint16_t _dim_r  = hal_adc_read(HAL_ADC_DIM_IN);
-    uint16_t _bus_r  = hal_adc_read(HAL_ADC_BUS_SENSE);
-    uint32_t _r32    = _bus_r ? ((uint32_t)_dim_r * 255u + _bus_r / 2u) / _bus_r : 0u;
-    uint8_t  dim_ratio = _r32 > 255u ? 255u : (uint8_t)_r32;
+    uint8_t dim_ratio = dimmer_get_ratio_u8();
     if (dimmer_gesture_tick(now, dim_ratio)) {
         uint8_t next = (uint8_t)((pixel_lighting_get_config() + 1u) % g_light_cfg.n_configs);
         pixel_lighting_set_config(next);
         hal_eeprom_put(EEPROM_ADDR_LIGHT_CFG, next);
     }
 
-    pixel_lighting_tick();
+    pixel_lighting_tick(now, dim_ratio);
 
     // Monitor lighting buck PG; log once on falling edge (good → faulted).
     bool pg_now = hal_lbuck_pg();

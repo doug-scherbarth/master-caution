@@ -1,10 +1,10 @@
 // lib/app/pixel_lighting.h
 // WS2812B pixel lighting renderer.
 //
-// pixel_lighting_tick() is called every application frame.  It reads the
-// dimmer ratio via HAL ADC, applies gamma, renders all segments of the active
-// lighting config, enforces the per-config current limit, and calls
-// hal_pixels_write().
+// pixel_lighting_tick() is called every application frame.  It accepts the
+// filtered dimmer brightness (0-255 from dimmer_get_ratio_u8()), applies gamma,
+// renders all segments of the active lighting config, enforces the per-config
+// current limit, and calls hal_pixels_write() at most 50 Hz.
 //
 // Call pixel_lighting_init() once after light_cfg_load() succeeds.
 
@@ -19,8 +19,9 @@
 // cfg must remain valid for the lifetime of the module.
 void pixel_lighting_init(const light_cfg_t *cfg, uint8_t config_index);
 
-// Render and output one frame.  Call once per application loop iteration.
-void pixel_lighting_tick(void);
+// Render and output one frame.  Rate-limited to 50 Hz; extra calls are no-ops.
+// brightness: filtered dimmer ratio 0-255 (from dimmer_get_ratio_u8()).
+void pixel_lighting_tick(uint32_t now_ms, uint8_t brightness);
 
 // Switch to a different config index (0-based).  Clamped to n_configs-1.
 // Returns the index actually applied.

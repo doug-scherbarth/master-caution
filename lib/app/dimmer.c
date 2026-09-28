@@ -41,6 +41,11 @@ void dimmer_tick(uint32_t now_ms, uint16_t dim_raw, uint16_t bus_raw) {
         (uint16_t)(((uint32_t)g_d.filtered_ratio * 3u + ratio_q12 + 2u) / 4u);
 }
 
+uint8_t dimmer_get_ratio_u8(void) {
+    uint32_t r = ((uint32_t)g_d.filtered_ratio * 255u + 2047u) / 4095u;
+    return (r > 255u) ? 255u : (uint8_t)r;
+}
+
 uint16_t dimmer_get_norm_q12(void) {
     const int32_t f = (int32_t)g_d.filtered_ratio;
     if (f <= (int32_t)DIM_DEADBAND_LOW)  return 0u;

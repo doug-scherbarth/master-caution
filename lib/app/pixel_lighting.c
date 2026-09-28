@@ -1,10 +1,12 @@
 // lib/app/pixel_lighting.c
-// WS2812B pixel renderer: dimmer → gamma → per-segment colour → current limit
-// → hal_pixels_write().
+// WS2812B pixel renderer: brightness → gamma → per-segment colour → current
+// limit → hal_pixels_write().  Rate-limited to 50 Hz.
 
 #include "pixel_lighting.h"
 #include "hal.h"
 #include <string.h>
+
+#define RENDER_PERIOD_MS 20u   // 50 Hz
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -12,6 +14,8 @@
 
 static const light_cfg_t *s_cfg         = NULL;
 static uint8_t            s_config_idx  = 0;
+static bool               s_rendered    = false;
+static uint32_t           s_last_render_ms;
 
 // Scratch render buffer: 3 bytes per pixel (R, G, B).
 static uint8_t s_buf[LIGHT_MAX_PIXELS * 3];
@@ -51,6 +55,8 @@ void pixel_lighting_init(const light_cfg_t *cfg, uint8_t config_index) {
     s_config_idx = 0;
     if (cfg && config_index < cfg->n_configs)
         s_config_idx = config_index;
+    s_rendered = false;
+    s_last_render_ms = 0;
     memset(s_buf, 0, sizeof(s_buf));
 }
 
@@ -63,24 +69,16 @@ uint8_t pixel_lighting_set_config(uint8_t index) {
 
 uint8_t pixel_lighting_get_config(void) { return s_config_idx; }
 
-void pixel_lighting_tick(void) {
+void pixel_lighting_tick(uint32_t now_ms, uint8_t brightness) {
     if (!s_cfg || s_cfg->n_configs == 0) return;
 
-    // --- Ratiometric dimmer: DIM_IN / BUS_SENSE (both 0-4095 12-bit ADC)
-    uint16_t dim_raw = hal_adc_read(HAL_ADC_DIM_IN);
-    uint16_t bus_raw = hal_adc_read(HAL_ADC_BUS_SENSE);
+    // Rate-limit rendering to 50 Hz
+    if (s_rendered && (uint32_t)(now_ms - s_last_render_ms) < RENDER_PERIOD_MS) return;
+    s_last_render_ms = now_ms;
+    s_rendered = true;
 
-    // ratio 0-255 (Q0), clamped [0, 255]
-    uint8_t ratio;
-    if (bus_raw == 0) {
-        ratio = 0;
-    } else {
-        uint32_t r = ((uint32_t)dim_raw * 255u + (bus_raw / 2u)) / bus_raw;
-        ratio = (r > 255u) ? 255u : (uint8_t)r;
-    }
-
-    // Apply gamma LUT to the ratio
-    uint8_t gamma_ratio = s_cfg->gamma_lut[ratio];
+    // Apply gamma LUT to the brightness
+    uint8_t gamma_ratio = s_cfg->gamma_lut[brightness];
 
     // --- Clear buffer
     uint16_t n = s_cfg->total_pixels;

@@ -70,12 +70,7 @@ static const char CFG_CURRENT_LIMIT[] =
 
 static light_cfg_t s_cfg;
 
-void setUp(void) {
-    hal_mock_reset();
-    // DIM_IN=4095, BUS_SENSE=4095 → ratio=255 (full brightness) by default
-    hal_mock_set_adc(HAL_ADC_DIM_IN,    4095);
-    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 4095);
-}
+void setUp(void)    { hal_mock_reset(); }
 void tearDown(void) {}
 
 static void load(const char *text) {
@@ -90,20 +85,20 @@ static void load(const char *text) {
 
 void test_tick_calls_pixels_write(void) {
     load(CFG_RED_LINEAR);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     TEST_ASSERT_EQUAL_INT(1, hal_mock_pixels_write_count());
 }
 
 void test_tick_writes_correct_pixel_count(void) {
     load(CFG_RED_LINEAR);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     TEST_ASSERT_EQUAL_UINT16(10, hal_mock_get_n_pixels());
 }
 
 void test_full_dimmer_full_red(void) {
-    // DIM_IN=BUS_SENSE → ratio=255 → gamma1 → 255; r=255,scale=100 → 255
+    // brightness=255 → gamma1 → 255; r=255,scale=100 → 255
     load(CFG_RED_LINEAR);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     const uint8_t *px = hal_mock_get_pixels();
     TEST_ASSERT_EQUAL_UINT8(255, px[0]);  // R
     TEST_ASSERT_EQUAL_UINT8(0,   px[1]);  // G
@@ -111,29 +106,25 @@ void test_full_dimmer_full_red(void) {
 }
 
 void test_zero_dimmer_all_black(void) {
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 0);
-    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 4095);
     load(CFG_RED_LINEAR);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 0);
     const uint8_t *px = hal_mock_get_pixels();
     for (int i = 0; i < 10 * 3; i++)
         TEST_ASSERT_EQUAL_UINT8(0, px[i]);
 }
 
 void test_half_dimmer_approx_half_brightness(void) {
-    // DIM_IN = 2048, BUS_SENSE = 4095 → ratio ≈ 127 → gamma1 → 127
-    // r = 255 × 100/100 × 127/255 ≈ 127
-    hal_mock_set_adc(HAL_ADC_DIM_IN,    2048);
-    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 4095);
+    // brightness=128 (DIM_IN=2048,BUS=4095 ratiometric) → gamma1 → 128
+    // r = 255 × 100/100 × 128/255 = 128
     load(CFG_RED_LINEAR);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 128);
     const uint8_t *px = hal_mock_get_pixels();
-    TEST_ASSERT_UINT8_WITHIN(2, 127, px[0]);
+    TEST_ASSERT_UINT8_WITHIN(2, 128, px[0]);
 }
 
 void test_two_segment_rendering(void) {
     load(CFG_TWO_SEG);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     const uint8_t *px = hal_mock_get_pixels();
     // pixels 0-4: red
     TEST_ASSERT_EQUAL_UINT8(255, px[0*3+0]);
@@ -157,7 +148,7 @@ void test_scale_50_halves_brightness(void) {
         "max_current_mA=9999\ngamma=1.0\n"
         "[config]\nname=half\nstart=0\ncount=4\nr=200\ng=0\nb=0\nscale=50\n";
     load(cfg_text);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     const uint8_t *px = hal_mock_get_pixels();
     // 200 × 50/100 × 255/255 = 100
     TEST_ASSERT_UINT8_WITHIN(2, 100, px[0]);
@@ -172,7 +163,7 @@ void test_current_limit_reduces_output(void) {
     // est_ma = 7650×20/255 + 10×1 = 600 + 10 = 610, cap = 50
     // So every channel should be scaled down by 50/610 ≈ 0.082
     load(CFG_CURRENT_LIMIT);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     const uint8_t *px = hal_mock_get_pixels();
     // After scaling, each channel should be < 30 (well below 255)
     for (int i = 0; i < 10; i++) {
@@ -183,11 +174,9 @@ void test_current_limit_reduces_output(void) {
 }
 
 void test_below_current_limit_no_reduction(void) {
-    // Very low max_current so even at zero dim there's no current
-    // Use dim=0 → all zero → no scaling applied regardless of max_current
-    hal_mock_set_adc(HAL_ADC_DIM_IN, 0);
+    // brightness=0 → all pixels zero → no scaling applied
     load(CFG_CURRENT_LIMIT);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 0);
     const uint8_t *px = hal_mock_get_pixels();
     for (int i = 0; i < 30; i++) TEST_ASSERT_EQUAL_UINT8(0, px[i]);
 }
@@ -206,7 +195,7 @@ void test_set_config_switches_active_config(void) {
 
     pixel_lighting_set_config(1);
     TEST_ASSERT_EQUAL_UINT8(1, pixel_lighting_get_config());
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 255);
     const uint8_t *px = hal_mock_get_pixels();
     TEST_ASSERT_EQUAL_UINT8(0,   px[0]);  // R=0
     TEST_ASSERT_EQUAL_UINT8(255, px[2]);  // B=255
@@ -257,18 +246,16 @@ void test_max_ma_invalid_config_idx_returns_zero(void) {
 // ---------------------------------------------------------------------------
 
 void test_gamma_2_2_half_dimmer_darker_than_linear(void) {
-    // With gamma=2.2, a half-ratio (≈127/255) produces a much darker output
-    // than linear (≈127). Check the rendered value is significantly less.
+    // With gamma=2.2, brightness≈128/255 produces a much darker output
+    // than linear. Check the rendered value is significantly less than 128.
     const char *cfg_text =
         "[global]\ntotal_pixels=2\nmA_per_channel=20\nquiescent_mA=1\n"
         "max_current_mA=9999\ngamma=2.2\n"
         "[config]\nname=g\nstart=0\ncount=2\nr=255\ng=0\nb=0\nscale=100\n";
-    hal_mock_set_adc(HAL_ADC_DIM_IN,    2048);
-    hal_mock_set_adc(HAL_ADC_BUS_SENSE, 4095);
     load(cfg_text);
-    pixel_lighting_tick();
+    pixel_lighting_tick(0, 128);
     const uint8_t *px = hal_mock_get_pixels();
-    // linear would give ~127; gamma=2.2 gives ~55 — check it's below 80
+    // linear would give 128; gamma=2.2 gives ~55 — check it's below 80
     TEST_ASSERT_TRUE(px[0] < 80);
     TEST_ASSERT_TRUE(px[0] > 0);
 }
@@ -279,8 +266,40 @@ void test_gamma_2_2_half_dimmer_darker_than_linear(void) {
 
 void test_tick_with_null_cfg_does_not_crash(void) {
     pixel_lighting_init(NULL, 0);
-    pixel_lighting_tick();  // must not crash; pixels_write should not be called
+    pixel_lighting_tick(0, 255);  // must not crash; pixels_write should not be called
     TEST_ASSERT_EQUAL_INT(0, hal_mock_pixels_write_count());
+}
+
+// ---------------------------------------------------------------------------
+// 50 Hz rate limiting
+// ---------------------------------------------------------------------------
+
+void test_renders_throttled_to_50hz(void) {
+    load(CFG_RED_LINEAR);
+    pixel_lighting_tick(0,  255);   // first render at t=0
+    pixel_lighting_tick(5,  255);   // within 20 ms window — skipped
+    pixel_lighting_tick(10, 255);   // still within window — skipped
+    TEST_ASSERT_EQUAL_INT(1, hal_mock_pixels_write_count());
+    pixel_lighting_tick(20, 255);   // new 20 ms window — renders
+    TEST_ASSERT_EQUAL_INT(2, hal_mock_pixels_write_count());
+}
+
+void test_low_brightness_noise_tolerance(void) {
+    // With gamma=2.2, brightness values 3, 5, 7 all map to 0 in the LUT,
+    // demonstrating that ±2 LSB of ADC noise at a low setting is invisible.
+    const char *cfg_text =
+        "[global]\ntotal_pixels=4\nmA_per_channel=20\nquiescent_mA=1\n"
+        "max_current_mA=9999\ngamma=2.2\n"
+        "[config]\nname=g\nstart=0\ncount=4\nr=255\ng=0\nb=0\nscale=100\n";
+    load(cfg_text);
+    pixel_lighting_tick(0,  3);
+    uint8_t r3 = hal_mock_get_pixels()[0];
+    pixel_lighting_tick(20, 5);
+    uint8_t r5 = hal_mock_get_pixels()[0];
+    pixel_lighting_tick(40, 7);
+    uint8_t r7 = hal_mock_get_pixels()[0];
+    TEST_ASSERT_EQUAL_UINT8(r3, r5);
+    TEST_ASSERT_EQUAL_UINT8(r5, r7);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +326,8 @@ int main(void) {
     RUN_TEST(test_max_ma_invalid_config_idx_returns_zero);
     RUN_TEST(test_gamma_2_2_half_dimmer_darker_than_linear);
     RUN_TEST(test_tick_with_null_cfg_does_not_crash);
+    RUN_TEST(test_renders_throttled_to_50hz);
+    RUN_TEST(test_low_brightness_noise_tolerance);
 
     return UNITY_END();
 }

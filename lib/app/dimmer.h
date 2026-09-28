@@ -25,4 +25,8 @@ void dimmer_tick(uint32_t now_ms, uint16_t dim_raw, uint16_t bus_raw);
 // Returns 0 when ratio is below the low dead band.
 uint16_t dimmer_get_norm_q12(void);
 
+// Filtered ratiometric value scaled to 0-255 (no dead-band clamping).
+// Use this for gesture detection and pixel brightness.
+uint8_t dimmer_get_ratio_u8(void);
+
 #endif // DIMMER_H
