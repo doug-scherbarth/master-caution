@@ -67,8 +67,11 @@ static WS2812Serial s_pixels(PIXEL_MAX, s_disp_mem, s_draw_mem, 29, WS2812_GRB);
 static const uint8_t LED_PINS[3] = { 25, 24, 28 };  // R, G, B
 
 void hal_init(void) {
-    // Capture reset cause from SRC_SRSR before it is cleared.
+    // Capture reset cause from SRC_SRSR, then write it back to clear the sticky bits.
+    // SRC_SRSR is write-1-to-clear; failing to clear means later warm resets
+    // continue to appear as watchdog resets.
     uint32_t srsr = SRC_SRSR;
+    SRC_SRSR = srsr;
     if (srsr & (SRC_SRSR_WDOG_RST_B | SRC_SRSR_WDOG3_RST_B))
         s_reset_cause = HAL_RESET_WATCHDOG;
     else if (srsr & SRC_SRSR_IPP_RESET_B)
