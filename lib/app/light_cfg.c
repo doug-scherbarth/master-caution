@@ -2,6 +2,7 @@
 // INI-style LIGHTS.CFG parser for WS2812B cabin/panel lighting.
 
 #include "light_cfg.h"
+#include "ini_util.h"
 #include "ring_log.h"
 #include "hal.h"
 #include <string.h>
@@ -26,26 +27,6 @@ static void build_gamma_lut(uint8_t *lut, float gamma) {
         lut[i] = (uint8_t)v;
     }
     lut[255] = 255;
-}
-
-// Lowercase a key in-place (ASCII only).
-static void str_lower(char *s) {
-    for (; *s; s++)
-        if (*s >= 'A' && *s <= 'Z') *s += 32;
-}
-
-// Extract one line from *pp, advance *pp, return length (0 = exhausted).
-static int next_line(const char **pp, char *buf, int bufsz) {
-    if (!**pp) return 0;
-    int n = 0;
-    while (**pp && **pp != '\n' && n < bufsz - 1)
-        buf[n++] = *(*pp)++;
-    if (**pp == '\n') (*pp)++;
-    // strip trailing CR and spaces
-    while (n > 0 && (buf[n-1] == '\r' || buf[n-1] == ' ' || buf[n-1] == '\t'))
-        n--;
-    buf[n] = '\0';
-    return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +57,7 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
     memset(&seg, 0, sizeof(seg));
 
     char line[128];
-    while (next_line(&text, line, sizeof(line)) || *text) {
+    while (ini_next_line(&text, line, sizeof(line)) || *text) {
         // skip blank and comment lines
         if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
 
@@ -95,7 +76,7 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
             for (int i = 1; line[i] && line[i] != ']' && hn < 31; i++)
                 hdr[hn++] = line[i];
             hdr[hn] = '\0';
-            str_lower(hdr);
+            ini_str_lower(hdr);
 
             if (strcmp(hdr, "global") == 0) {
                 sec = SEC_GLOBAL;
@@ -124,7 +105,7 @@ bool light_cfg_parse(const char *text, light_cfg_t *out) {
         while (klen > 0 && (line[klen-1] == ' ' || line[klen-1] == '\t')) klen--;
         if (klen >= 32) klen = 31;
         memcpy(key, line, (size_t)klen);
-        str_lower(key);
+        ini_str_lower(key);
 
         const char *vp = eq + 1;
         while (*vp == ' ' || *vp == '\t') vp++;

@@ -41,18 +41,19 @@
 #include <SD.h>
 #include <imxrt.h>
 #include "hal.h"
+#include "types.h"
 #include "audio_glue.h"
 
 // --- Reset cause (read SRC_SRSR once at init) ------------------------------
 static hal_reset_cause_t s_reset_cause = HAL_RESET_POR;
 
 // --- Alarm pin configuration -----------------------------------------------
-static const uint8_t ALARM_PINS[14] = {
+static const uint8_t ALARM_PINS[CHANNEL_COUNT] = {
      0,  1,  5,  6,  8,  9, 11,   // CH[ 0.. 6]
     12, 14, 15, 16, 17, 22, 23     // CH[ 7..13]
 };
 
-static bool s_alarm_active_high[14];   // true = alarm asserted when pin HIGH
+static bool s_alarm_active_high[CHANNEL_COUNT];   // true = alarm asserted when pin HIGH
 
 // --- Pixel chain (WS2812Serial, pin 29, DMA) ------------------------------
 #define PIXEL_MAX 150
@@ -63,6 +64,8 @@ static WS2812Serial s_pixels(PIXEL_MAX, s_disp_mem, s_draw_mem, 29, WS2812_GRB);
 #define PIN_BUTTON    18
 #define PIN_DIM_IN    26   // A12
 #define PIN_BUS_SENSE 27   // A13
+#define PIN_LBUCK_EN  30   // N-FET: HIGH = FET on = EN pulled low = buck off
+#define PIN_LBUCK_PG  31   // open-drain power-good (INPUT_PULLDOWN holds low when buck off)
 
 static const uint8_t LED_PINS[3] = { 25, 24, 28 };  // R, G, B
 
@@ -82,7 +85,7 @@ void hal_init(void) {
     // Alarm pins: do NOT configure pull here.
     // hal_alarm_configure() is called by app_init() after alarm_cfg_load()
     // with the correct pull per channel.  Pre-set polarity to active-high.
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < CHANNEL_COUNT; i++) {
         s_alarm_active_high[i] = true;
         // Leave as INPUT (no pull) until hal_alarm_configure() is called.
         pinMode(ALARM_PINS[i], INPUT);
@@ -98,10 +101,10 @@ void hal_init(void) {
         analogWrite(LED_PINS[i], 0);  // N-FET: 0 duty = off
     }
 
-    // Lighting buck — keep disabled until config loaded (pin 30 HIGH = FET on = EN low = off)
-    pinMode(30, OUTPUT);
-    digitalWrite(30, HIGH);
-    pinMode(31, INPUT_PULLDOWN);  // PG — open-drain; pull-down holds low when buck is off
+    // Lighting buck — keep disabled until config loaded.
+    pinMode(PIN_LBUCK_EN, OUTPUT);
+    digitalWrite(PIN_LBUCK_EN, HIGH);
+    pinMode(PIN_LBUCK_PG, INPUT_PULLDOWN);
 
     // Pixel chain
     s_pixels.begin();
@@ -113,7 +116,7 @@ void hal_init(void) {
 hal_reset_cause_t hal_reset_cause(void) { return s_reset_cause; }
 
 void hal_alarm_configure(uint8_t ch, bool active_high, hal_pull_t pull) {
-    if (ch >= 14) return;
+    if (ch >= CHANNEL_COUNT) return;
     s_alarm_active_high[ch] = active_high;
     int mode;
     switch (pull) {
@@ -129,7 +132,7 @@ uint32_t hal_millis(void) {
 }
 
 bool hal_read_alarm(uint8_t channel) {
-    if (channel >= 14) return false;
+    if (channel >= CHANNEL_COUNT) return false;
     bool raw = digitalRead(ALARM_PINS[channel]);
     return s_alarm_active_high[channel] ? raw : !raw;  // apply configured polarity
 }
@@ -156,6 +159,10 @@ void hal_audio_play(uint8_t wav_id) {
     audio_glue_play(wav_id);
 }
 
+void hal_audio_set_gain(float gain) {
+    audio_glue_set_gain(gain);
+}
+
 bool hal_audio_busy(void)  { return audio_glue_busy();  }
 bool hal_audio_sd_ok(void) { return audio_glue_sd_ok(); }
 
@@ -170,13 +177,11 @@ void hal_pixels_write(const uint8_t *rgb_buf, uint16_t n_pixels) {
 }
 
 void hal_lbuck_enable(bool en) {
-    // Pin 30 HIGH → N-FET on → EN pulled low → buck off
-    // Pin 30 LOW  → N-FET off → EN floats/high → buck runs
-    digitalWrite(30, en ? LOW : HIGH);
+    digitalWrite(PIN_LBUCK_EN, en ? LOW : HIGH);
 }
 
 bool hal_lbuck_pg(void) {
-    return digitalRead(31) == HIGH;
+    return digitalRead(PIN_LBUCK_PG) == HIGH;
 }
 
 uint8_t hal_eeprom_get(uint16_t addr) {

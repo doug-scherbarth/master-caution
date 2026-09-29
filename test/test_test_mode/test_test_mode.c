@@ -4,6 +4,7 @@
 
 #include <unity.h>
 #include "test_mode.h"
+#include "startup_tones.h"
 #include "hal.h"
 
 // HAL mock instrumentation ------------------------------------------
@@ -92,7 +93,7 @@ void test_blue_to_tone_lo_at_timeout(void) {
     TEST_ASSERT_EQUAL(0, GREEN);
     TEST_ASSERT_EQUAL(0, BLUE);
     TEST_ASSERT_EQUAL(1, hal_play_calls);
-    TEST_ASSERT_EQUAL(TEST_WAV_LO, hal_play_log[0]);
+    TEST_ASSERT_EQUAL(STARTUP_WAV_LO, hal_play_log[0]);
 }
 
 void test_tone_lo_holds_while_busy(void) {
@@ -119,9 +120,9 @@ void test_tone_sequence_lo_mid_hi(void) {
     test_mode_tick(LED_STEP * 3 + 20);  // → TONE_HI
 
     TEST_ASSERT_EQUAL(3, hal_play_calls);
-    TEST_ASSERT_EQUAL(TEST_WAV_LO,  hal_play_log[0]);
-    TEST_ASSERT_EQUAL(TEST_WAV_MID, hal_play_log[1]);
-    TEST_ASSERT_EQUAL(TEST_WAV_HI,  hal_play_log[2]);
+    TEST_ASSERT_EQUAL(STARTUP_WAV_LO,  hal_play_log[0]);
+    TEST_ASSERT_EQUAL(STARTUP_WAV_MID, hal_play_log[1]);
+    TEST_ASSERT_EQUAL(STARTUP_WAV_HI,  hal_play_log[2]);
 }
 
 void test_returns_idle_after_tone_hi(void) {

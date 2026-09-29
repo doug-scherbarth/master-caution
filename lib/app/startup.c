@@ -1,12 +1,8 @@
 // lib/app/startup.c
 #include "startup.h"
+#include "startup_tones.h"
 #include "channel_table.h"
 #include "hal.h"
-
-// Sine-tone WAV IDs on SD card: 13.WAV, 14.WAV, 15.WAV
-#define WAV_TONE_LO   13   // 440 Hz
-#define WAV_TONE_MID  14   // 880 Hz
-#define WAV_TONE_HI   15   // 1320 Hz
 
 typedef enum {
     SS_RED = 0,
@@ -45,12 +41,6 @@ static bool       g_ch_fault;     // set at white-end: channel asserted OR cfg_f
 static bool       g_cfg_fault;    // pre-set alarm config error (passed to startup_init)
 static bool       g_dimmer_warn;
 
-static void rgb(uint16_t r, uint16_t g, uint16_t b) {
-    hal_set_led_duty(HAL_LED_RED,   r);
-    hal_set_led_duty(HAL_LED_GREEN, g);
-    hal_set_led_duty(HAL_LED_BLUE,  b);
-}
-
 // Returns true if any channel not expected_at_rest is asserted at startup.
 static bool any_channel_faulted(void) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
@@ -79,9 +69,9 @@ static void enter(ss_state_t s, uint32_t now_ms) {
         g_phase_start = now_ms;
         rgb(4095, 4095, 0);   // amber
         break;
-    case SS_TONE_LO:  rgb(0, 0, 0); hal_audio_play(WAV_TONE_LO);  break;
-    case SS_TONE_MID: rgb(0, 0, 0); hal_audio_play(WAV_TONE_MID); break;
-    case SS_TONE_HI:  rgb(0, 0, 0); hal_audio_play(WAV_TONE_HI);  break;
+    case SS_TONE_LO:  rgb(0, 0, 0); hal_audio_play(STARTUP_WAV_LO);  break;
+    case SS_TONE_MID: rgb(0, 0, 0); hal_audio_play(STARTUP_WAV_MID); break;
+    case SS_TONE_HI:  rgb(0, 0, 0); hal_audio_play(STARTUP_WAV_HI);  break;
     case SS_SD_ERROR:
         g_flash_on    = true;
         g_flash_last  = now_ms;

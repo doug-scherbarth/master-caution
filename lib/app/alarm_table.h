@@ -1,6 +1,6 @@
 // lib/app/alarm_table.h
 //
-// Pilot-facing alarms — 13 in v1.3, sized to ALARM_COUNT_MAX for growth.
+// Pilot-facing alarms, sized to ALARM_COUNT_MAX for growth.
 // A descriptor declares: name, severity, source kind, source binding, wav id.
 // Composite alarms supply a function pointer that operates on the debounced
 // channel-state array; direct alarms supply a channel index. No other special
@@ -48,6 +48,9 @@ enum wav_id {
 };
 
 extern const alarm_descriptor_t ALARM_TABLE[];
-extern const uint8_t            ALARM_COUNT;
+
+#define ALARM_COUNT 13
+_Static_assert(ALARM_COUNT <= ALARM_COUNT_MAX,
+               "ALARM_COUNT exceeds ALARM_COUNT_MAX; raise ALARM_COUNT_MAX in types.h");
 
 #endif // ALARM_TABLE_H

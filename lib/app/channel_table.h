@@ -3,7 +3,7 @@
 // 14 physical input channels on DB-15 #1 (v1.4).
 // Indices match the connector pin number minus 1 (ch 0 = pin 1).
 // Pin 15 (formerly CH_SPARE) is now DIM_IN — see §2 of spec v1.4.
-// All channels are active-high at the connector (INPUT_PULLDOWN, assert = HIGH); HAL reads directly.
+// Polarity and pull are configured per-channel by hal_alarm_configure() after alarm_cfg_load().
 
 #ifndef CHANNEL_TABLE_H
 #define CHANNEL_TABLE_H

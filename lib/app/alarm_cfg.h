@@ -26,9 +26,10 @@ typedef enum {
 } alarm_pull_t;
 
 typedef struct {
-    uint16_t    debounce_ms;  // 50–5000 ms; out-of-range → compiled default
-    bool        active_high;  // true = assert HIGH (default)
-    alarm_pull_t pull;        // default: ALARM_PULL_DOWN
+    uint16_t    debounce_ms;    // 50–5000 ms; out-of-range → compiled default
+    bool        active_high;    // true = assert HIGH (default)
+    alarm_pull_t pull;          // default: ALARM_PULL_DOWN
+    uint8_t     wav_id_override;// 0xFF = use ALARM_TABLE compiled default; 0..WAV_COUNT-1 = override
 } alarm_entry_t;
 
 typedef struct {

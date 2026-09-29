@@ -6,6 +6,7 @@
 #include <string.h>
 #include "alarm_cfg.h"
 #include "channel_table.h"
+#include "alarm_table.h"
 
 void hal_mock_reset(void);
 void hal_mock_set_file(const char *content);
@@ -199,6 +200,66 @@ void test_defaults_then_named_polarity(void) {
 // Robustness
 // ---------------------------------------------------------------------------
 
+// Spec §2.3: severity is compiled in, never SD-configurable.
+// A severity = key is treated as unknown; one warning is produced.
+// Spec §2.3: wav_id override is range-checked; 0..WAV_COUNT-1 accepted, else warn.
+
+void test_wav_id_valid_stored_in_override(void) {
+    alarm_cfg_fallback(&cfg);
+    uint8_t warns = alarm_cfg_parse("[CO_DETECT]\nwav_id = 5\n", &cfg);
+    TEST_ASSERT_EQUAL(0, warns);
+    TEST_ASSERT_EQUAL(5, cfg.ch[CH_CO_DETECT].wav_id_override);
+}
+
+void test_wav_id_out_of_range_warns_and_keeps_default(void) {
+    alarm_cfg_fallback(&cfg);
+    uint8_t warns = alarm_cfg_parse("[CO_DETECT]\nwav_id = 99\n", &cfg);
+    TEST_ASSERT_GREATER_OR_EQUAL(1, warns);
+    TEST_ASSERT_EQUAL(0xFF, cfg.ch[CH_CO_DETECT].wav_id_override);  // unchanged
+}
+
+void test_wav_id_zero_is_valid(void) {
+    alarm_cfg_fallback(&cfg);
+    uint8_t warns = alarm_cfg_parse("[CO_DETECT]\nwav_id = 0\n", &cfg);
+    TEST_ASSERT_EQUAL(0, warns);
+    TEST_ASSERT_EQUAL(0, cfg.ch[CH_CO_DETECT].wav_id_override);
+}
+
+void test_wav_id_boundary_max_valid(void) {
+    alarm_cfg_fallback(&cfg);
+    char buf[64];
+    // WAV_COUNT - 1 is the maximum valid id
+    snprintf(buf, sizeof(buf), "[CO_DETECT]\nwav_id = %d\n", (int)(WAV_COUNT - 1));
+    uint8_t warns = alarm_cfg_parse(buf, &cfg);
+    TEST_ASSERT_EQUAL(0, warns);
+    TEST_ASSERT_EQUAL((uint8_t)(WAV_COUNT - 1), cfg.ch[CH_CO_DETECT].wav_id_override);
+}
+
+void test_wav_id_in_defaults_section_silently_ignored(void) {
+    // wav_id in [defaults] is silently ignored (defaults pass never warns).
+    // Verify no channel's override was accidentally set.
+    alarm_cfg_fallback(&cfg);
+    uint8_t warns = alarm_cfg_parse("[defaults]\nwav_id = 2\n", &cfg);
+    TEST_ASSERT_EQUAL(0, warns);
+    for (int i = 0; i < CHANNEL_COUNT; i++)
+        TEST_ASSERT_EQUAL_MESSAGE(0xFF, cfg.ch[i].wav_id_override, CHANNEL_TABLE[i].name);
+}
+
+void test_wav_id_fallback_is_0xFF(void) {
+    alarm_cfg_fallback(&cfg);
+    for (int i = 0; i < CHANNEL_COUNT; i++)
+        TEST_ASSERT_EQUAL_MESSAGE(0xFF, cfg.ch[i].wav_id_override, CHANNEL_TABLE[i].name);
+}
+
+void test_severity_key_counts_as_unknown_key_warn(void) {
+    alarm_cfg_fallback(&cfg);
+    uint8_t warns = alarm_cfg_parse("[CO_DETECT]\nseverity = low\n", &cfg);
+    TEST_ASSERT_GREATER_OR_EQUAL(1, warns);
+    // Channel config unchanged from defaults (severity has no channel-level effect).
+    TEST_ASSERT_TRUE(cfg.ch[CH_CO_DETECT].active_high);
+    TEST_ASSERT_EQUAL(ALARM_PULL_DOWN, cfg.ch[CH_CO_DETECT].pull);
+}
+
 void test_unknown_section_ignored(void) {
     hal_mock_set_file("[BOGUS_CHANNEL]\nactive_high = no\n");
     alarm_cfg_load(&cfg);
@@ -258,6 +319,13 @@ int main(void) {
     RUN_TEST(test_named_section_debounce_override);
     RUN_TEST(test_defaults_then_named_override);
     RUN_TEST(test_defaults_then_named_polarity);
+    RUN_TEST(test_wav_id_fallback_is_0xFF);
+    RUN_TEST(test_wav_id_valid_stored_in_override);
+    RUN_TEST(test_wav_id_out_of_range_warns_and_keeps_default);
+    RUN_TEST(test_wav_id_zero_is_valid);
+    RUN_TEST(test_wav_id_boundary_max_valid);
+    RUN_TEST(test_wav_id_in_defaults_section_silently_ignored);
+    RUN_TEST(test_severity_key_counts_as_unknown_key_warn);
     RUN_TEST(test_unknown_section_ignored);
     RUN_TEST(test_case_insensitive_section);
     RUN_TEST(test_unknown_pull_value_keeps_fallback);

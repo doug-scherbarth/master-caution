@@ -9,7 +9,7 @@
 //
 // Two implementations:
 //   src/hal_teensy/  — real, talks to Teensy 4.1 + PCM5102 + SD card
-//   src/hal_host/    — desktop mock, reads from a test fixture
+//   test/*/hal_mock.c — per-suite mocks for host unit tests
 
 #ifndef HAL_H
 #define HAL_H
@@ -66,6 +66,7 @@ uint16_t hal_adc_read(hal_adc_ch_t ch);     // 0..4095, 12-bit ADC
 // Outputs
 void     hal_set_led_duty(hal_led_t led, uint16_t duty);  // 0..4095, 12-bit PWM
 void     hal_audio_play(uint8_t wav_id);
+void     hal_audio_set_gain(float gain);  // set amplifier gain (0.0 = mute, 1.0 = unity, 2.0 = max)
 bool     hal_audio_busy(void);
 bool     hal_audio_sd_ok(void);    // true if SD card mounted and 0.WAV readable
 

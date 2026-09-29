@@ -12,6 +12,7 @@ extern "C" {
 
 void audio_glue_init(void);
 void audio_glue_play(uint8_t wav_id);
+void audio_glue_set_gain(float gain);
 bool audio_glue_busy(void);
 bool audio_glue_sd_ok(void);
 

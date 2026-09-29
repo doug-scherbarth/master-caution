@@ -29,4 +29,5 @@ const alarm_descriptor_t ALARM_TABLE[] = {
   { "BOOST_PUMP_ON",   SEV_LOW,  SRC_DIRECT,    CH_BOOST_PUMP_ON,   NULL,            WAV_BOOST      },
 };
 
-const uint8_t ALARM_COUNT = sizeof(ALARM_TABLE) / sizeof(ALARM_TABLE[0]);
+_Static_assert(sizeof(ALARM_TABLE)/sizeof(ALARM_TABLE[0]) == ALARM_COUNT,
+               "ALARM_TABLE row count does not match ALARM_COUNT");

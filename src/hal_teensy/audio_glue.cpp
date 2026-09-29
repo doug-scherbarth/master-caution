@@ -24,17 +24,20 @@ static AudioConnection  g_patch_pr(g_player, 1, g_amp_r, 0);
 static AudioConnection  g_patch_al(g_amp_l,  0, g_i2s,   0);
 static AudioConnection  g_patch_ar(g_amp_r,  0, g_i2s,   1);
 
-#define OUTPUT_GAIN 0.3f
-
 void audio_glue_init(void) {
     AudioMemory(24);
-    g_amp_l.gain(OUTPUT_GAIN);
-    g_amp_r.gain(OUTPUT_GAIN);
+    g_amp_l.gain(0.3f);   // default; overridden by audio_cfg_load() in app_init()
+    g_amp_r.gain(0.3f);
     if (SD.begin(BUILTIN_SDCARD)) {
         File f = SD.open("0.WAV");
         g_sd_ok = (bool)f;
         if (f) f.close();
     }
+}
+
+void audio_glue_set_gain(float gain) {
+    g_amp_l.gain(gain);
+    g_amp_r.gain(gain);
 }
 
 void audio_glue_play(uint8_t wav_id) {

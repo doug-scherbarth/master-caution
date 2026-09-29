@@ -35,6 +35,7 @@ void hal_audio_play(uint8_t wav_id) {
     g_busy = true;
 }
 
+void hal_audio_set_gain(float gain)                { (void)gain; }
 bool hal_audio_busy(void)                          { return g_busy; }
 void hal_init(void)                                {}
 uint32_t hal_millis(void)                          { return 0; }

@@ -20,7 +20,8 @@ typedef enum {
     LOG_ALARM_ACK          = 2,
     LOG_ALARM_CLEAR        = 3,
     LOG_ALARM_CLEAR_NO_ACK = 4,
-    LOG_SYS_FAULT          = 5,  // system fault; alarm_idx carries fault code
+    LOG_ALARM_REASSERT     = 5,  // PENDING_ACK_CLEARED re-asserts → PENDING_ACK (silent)
+    LOG_SYS_FAULT          = 6,  // system fault; alarm_idx carries fault code
 } log_event_t;
 
 // Fault codes for LOG_SYS_FAULT records
@@ -28,6 +29,7 @@ typedef enum {
 #define LOG_FAULT_WATCHDOG_RESET 1u   // system reset by hardware watchdog
 #define LOG_FAULT_ALARM_CFG      2u   // /ALARMS.CFG found but unreadable
 #define LOG_FAULT_LIGHT_CFG      3u   // /LIGHTS.CFG too large to read
+#define LOG_FAULT_AUDIO_CFG      4u   // /AUDIO.CFG too large to read
 
 void ring_log_init(void);
 

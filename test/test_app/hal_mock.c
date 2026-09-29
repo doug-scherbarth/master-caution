@@ -64,6 +64,7 @@ void hal_audio_play(uint8_t wav_id) {
     s_audio_active = true;
     s_audio_until  = g_mock_now + AUDIO_LEN_MS;
 }
+void hal_audio_set_gain(float gain) { (void)gain; }
 bool hal_audio_busy(void) {
     if (s_audio_active && (int32_t)(g_mock_now - s_audio_until) >= 0) s_audio_active = false;
     return s_audio_active;

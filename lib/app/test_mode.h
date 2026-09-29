@@ -3,19 +3,12 @@
 // Hardware self-test sequence: RED → GREEN → BLUE, then three ascending tones.
 // Triggered by a 3-second long press. Drives LEDs and audio directly via HAL,
 // bypassing the normal led_controller and audio_queue.
-//
-// TODO: evaluate removing once startup sequence provides equivalent coverage.
-//
-// Reserved wav IDs for the three test tones (above WAV_COUNT=13):
+
 #ifndef TEST_MODE_H
 #define TEST_MODE_H
 
 #include <stdint.h>
 #include <stdbool.h>
-
-#define TEST_WAV_LO   13   // 440 Hz
-#define TEST_WAV_MID  14   // 880 Hz
-#define TEST_WAV_HI   15   // 1320 Hz
 
 void test_mode_init(void);
 bool test_mode_active(void);

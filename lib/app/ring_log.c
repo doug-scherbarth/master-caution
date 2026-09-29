@@ -25,6 +25,7 @@ static const char *event_name(log_event_t e) {
     case LOG_ALARM_ACK:          return "ACK";
     case LOG_ALARM_CLEAR:        return "CLEAR";
     case LOG_ALARM_CLEAR_NO_ACK: return "CLEAR_NO_ACK";
+    case LOG_ALARM_REASSERT:     return "REASSERT";
     default:                     return "?";
     }
 }

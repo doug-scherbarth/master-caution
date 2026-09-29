@@ -2,7 +2,7 @@
 #include "dimmer.h"
 #include <string.h>
 
-// Spec v1.4 §6.3 tunables (match gesture_cfg.h defaults).
+// Spec v1.4 §6.3 tunables.
 #define SAMPLE_PERIOD_MS   20u    // 50 Hz
 #define DIM_DEADBAND_LOW  123u    // 3%  * 4095
 #define DIM_DEADBAND_HIGH 3972u   // 97% * 4095

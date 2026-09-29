@@ -67,16 +67,18 @@ void test_held_assertion_does_not_re_fire_audio(void) {
     TEST_ASSERT_EQUAL(1, audio_queue_calls);
 }
 
-void test_pending_clears_without_ack(void) {
+void test_pending_clears_without_ack_latches(void) {
+    // Condition clears before the pilot acks: alarm latches in PENDING_ACK_CLEARED
+    // and must still be acknowledged (spec §4.6: every onset requires an ack).
     ch[CH_CO_DETECT] = true;
     alarm_engine_tick(100, ch);
     ch[CH_CO_DETECT] = false;
     alarm_engine_tick(200, ch);
 
     uint8_t i = find_alarm("CO_DETECT");
-    TEST_ASSERT_EQUAL(AS_INACTIVE, alarm_engine_runtime(i)->state);
-    TEST_ASSERT_EQUAL(SEV_NONE, alarm_engine_max_active_severity());
-    TEST_ASSERT_FALSE(alarm_engine_any_pending_ack());
+    TEST_ASSERT_EQUAL(AS_PENDING_ACK_CLEARED, alarm_engine_runtime(i)->state);
+    TEST_ASSERT_EQUAL(SEV_HIGH, alarm_engine_max_active_severity());
+    TEST_ASSERT_TRUE(alarm_engine_any_pending_ack());
 }
 
 // --- Acknowledge --------------------------------------------------------
@@ -133,6 +135,51 @@ void test_button_only_promotes_pending_not_already_acknowledged(void) {
     TEST_ASSERT_EQUAL(AS_ACKNOWLEDGED, alarm_engine_runtime(find_alarm("CO_DETECT"))->state);
     TEST_ASSERT_EQUAL(AS_ACKNOWLEDGED, alarm_engine_runtime(find_alarm("OIL_PRESS_LOW"))->state);
     TEST_ASSERT_FALSE(alarm_engine_any_pending_ack());
+}
+
+// --- PENDING_ACK_CLEARED latch behaviour --------------------------------
+
+void test_pending_cleared_button_press_goes_inactive(void) {
+    // Condition fires and clears before ack; button press dismisses it.
+    ch[CH_CO_DETECT] = true;
+    alarm_engine_tick(100, ch);
+    ch[CH_CO_DETECT] = false;
+    alarm_engine_tick(200, ch);
+    TEST_ASSERT_EQUAL(AS_PENDING_ACK_CLEARED,
+                      alarm_engine_runtime(find_alarm("CO_DETECT"))->state);
+
+    alarm_engine_on_button_press(250);
+
+    TEST_ASSERT_EQUAL(AS_INACTIVE, alarm_engine_runtime(find_alarm("CO_DETECT"))->state);
+    TEST_ASSERT_EQUAL(SEV_NONE, alarm_engine_max_active_severity());
+    TEST_ASSERT_FALSE(alarm_engine_any_pending_ack());
+}
+
+void test_pending_cleared_reassert_returns_to_pending_silent(void) {
+    // Glitch clears before ack, then condition re-asserts — silent (onset already announced).
+    ch[CH_CO_DETECT] = true;
+    alarm_engine_tick(100, ch);
+    ch[CH_CO_DETECT] = false;
+    alarm_engine_tick(200, ch);
+    TEST_ASSERT_EQUAL(1, audio_queue_calls);
+
+    ch[CH_CO_DETECT] = true;
+    alarm_engine_tick(300, ch);
+
+    TEST_ASSERT_EQUAL(AS_PENDING_ACK, alarm_engine_runtime(find_alarm("CO_DETECT"))->state);
+    TEST_ASSERT_EQUAL(1, audio_queue_calls);  // no new audio — onset was already announced
+    TEST_ASSERT_TRUE(alarm_engine_any_pending_ack());
+}
+
+void test_pending_cleared_does_not_fire_extra_audio_while_waiting(void) {
+    ch[CH_CO_DETECT] = true;
+    alarm_engine_tick(100, ch);
+    ch[CH_CO_DETECT] = false;
+    alarm_engine_tick(200, ch);
+    alarm_engine_tick(300, ch);
+    alarm_engine_tick(400, ch);
+    // No re-assert, no extra audio push.
+    TEST_ASSERT_EQUAL(1, audio_queue_calls);
 }
 
 // --- Re-trigger (spec §4.6) --------------------------------------------
@@ -229,9 +276,13 @@ void test_max_severity_tracks_highest_active(void) {
     alarm_engine_tick(300, ch);
     TEST_ASSERT_EQUAL(SEV_HIGH, alarm_engine_max_active_severity());
 
-    // High clears — MED still active, severity steps down
+    // High clears un-acked — still PENDING_ACK_CLEARED, severity remains HIGH.
     ch[CH_OIL_PRESS_LOW] = false;
     alarm_engine_tick(400, ch);
+    TEST_ASSERT_EQUAL(SEV_HIGH, alarm_engine_max_active_severity());
+
+    // Ack all — OIL_PRESS_LOW (already cleared) goes INACTIVE; severity steps down.
+    alarm_engine_on_button_press(450);
     TEST_ASSERT_EQUAL(SEV_MED, alarm_engine_max_active_severity());
 }
 
@@ -250,12 +301,15 @@ int main(void) {
     RUN_TEST(test_initial_state_all_inactive);
     RUN_TEST(test_direct_assertion_transitions_to_pending_and_fires_audio);
     RUN_TEST(test_held_assertion_does_not_re_fire_audio);
-    RUN_TEST(test_pending_clears_without_ack);
+    RUN_TEST(test_pending_clears_without_ack_latches);
     RUN_TEST(test_button_press_promotes_pending_to_acknowledged);
     RUN_TEST(test_button_press_does_not_re_fire_audio);
     RUN_TEST(test_acknowledged_then_cleared_returns_to_inactive);
     RUN_TEST(test_button_with_no_pending_is_noop);
     RUN_TEST(test_button_only_promotes_pending_not_already_acknowledged);
+    RUN_TEST(test_pending_cleared_button_press_goes_inactive);
+    RUN_TEST(test_pending_cleared_reassert_returns_to_pending_silent);
+    RUN_TEST(test_pending_cleared_does_not_fire_extra_audio_while_waiting);
     RUN_TEST(test_retrigger_after_ack_clear_fires_audio_again);
     RUN_TEST(test_composite_one_input_alone_does_not_fire);
     RUN_TEST(test_composite_both_inputs_fires);

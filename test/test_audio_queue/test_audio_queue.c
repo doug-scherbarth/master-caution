@@ -167,6 +167,25 @@ void test_replay_allowed_after_completion(void) {
     TEST_ASSERT_EQUAL(0, audio_queue_dropped_dup_count());
 }
 
+// Spec §5: when the channel frees, the highest-severity queued entry plays
+// next, regardless of arrival order.  Push Low, Low, High while playing → High next.
+void test_high_queued_during_playback_plays_before_earlier_low(void) {
+    audio_queue_push(WAV_BOOST, SEV_LOW);
+    audio_queue_tick(0);                    // BOOST starts playing
+    TEST_ASSERT_EQUAL(WAV_BOOST, hal_play_last_wav);
+
+    audio_queue_push(WAV_FLAPS_OS, SEV_LOW);  // low queued first
+    audio_queue_push(WAV_CO,       SEV_HIGH); // high queued second
+
+    hal_mock_set_busy(false);
+    audio_queue_tick(10);
+    TEST_ASSERT_EQUAL(WAV_CO, hal_play_last_wav);   // High plays next
+
+    hal_mock_set_busy(false);
+    audio_queue_tick(20);
+    TEST_ASSERT_EQUAL(WAV_FLAPS_OS, hal_play_last_wav); // Low plays last
+}
+
 // --- Capacity / overflow ------------------------------------------
 
 void test_full_queue_drops_with_counter(void) {
@@ -192,6 +211,7 @@ int main(void) {
     RUN_TEST(test_next_dispatches_when_busy_clears);
     RUN_TEST(test_higher_severity_plays_before_lower_when_idle);
     RUN_TEST(test_no_preemption_higher_pushed_during_playback_waits);
+    RUN_TEST(test_high_queued_during_playback_plays_before_earlier_low);
     RUN_TEST(test_fifo_within_same_severity);
     RUN_TEST(test_mixed_severities_drain_correctly);
     RUN_TEST(test_duplicate_in_queue_dropped);

@@ -17,7 +17,9 @@
 // compiled default and counted as a warning.
 
 #include "alarm_cfg.h"
+#include "ini_util.h"
 #include "channel_table.h"
+#include "alarm_table.h"
 #include "hal.h"
 #include <string.h>
 #include <stdlib.h>
@@ -30,25 +32,6 @@
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-static void str_lower(char *s) {
-    for (; *s; s++)
-        if (*s >= 'A' && *s <= 'Z') *s += 32;
-}
-
-// Reads one line into buf (without the trailing newline), returns length.
-// Returns 0 on a blank/empty line (still advances the pointer past it).
-static int next_line(const char **pp, char *buf, int bufsz) {
-    if (!**pp) return 0;
-    int n = 0;
-    while (**pp && **pp != '\n' && n < bufsz - 1)
-        buf[n++] = *(*pp)++;
-    if (**pp == '\n') (*pp)++;
-    while (n > 0 && (buf[n-1] == '\r' || buf[n-1] == ' ' || buf[n-1] == '\t'))
-        n--;
-    buf[n] = '\0';
-    return n;
-}
 
 static bool try_parse_bool(const char *s, bool *out) {
     if (strcmp(s, "yes") == 0 || strcmp(s, "true") == 0 || strcmp(s, "1") == 0) {
@@ -74,7 +57,7 @@ static int8_t find_channel(const char *hdr_lower) {
         int  tlen = 0;
         for (const char *p = CHANNEL_TABLE[i].name; *p && tlen < 31; p++)
             tbl[tlen++] = *p;
-        str_lower(tbl);
+        ini_str_lower(tbl);
         if (strcmp(hdr_lower, tbl) == 0) return (int8_t)i;
     }
     return -1;
@@ -90,7 +73,7 @@ static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass
     uint8_t   warns  = 0;
 
     char line[128];
-    while (next_line(&text, line, sizeof(line)) || *text) {
+    while (ini_next_line(&text, line, sizeof(line)) || *text) {
         if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
 
         if (line[0] == '[') {
@@ -99,7 +82,7 @@ static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass
             for (int i = 1; line[i] && line[i] != ']' && hn < 31; i++)
                 hdr[hn++] = line[i];
             hdr[hn] = '\0';
-            str_lower(hdr);
+            ini_str_lower(hdr);
 
             if (strcmp(hdr, "defaults") == 0) {
                 sec = SEC_DEFAULTS; cur_ch = -1;
@@ -127,17 +110,16 @@ static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass
         while (klen > 0 && (line[klen-1] == ' ' || line[klen-1] == '\t')) klen--;
         if (klen > 31) klen = 31;
         memcpy(key, line, (size_t)klen);
-        str_lower(key);
+        ini_str_lower(key);
 
-        // Extract value, stripping trailing whitespace and inline ; # comments.
+        // Extract value; strip inline comments and trailing whitespace.
         char        val[32] = {0};
         const char *vp      = eq + 1;
         while (*vp == ' ' || *vp == '\t') vp++;
-        int vlen = 0;
-        while (vp[vlen] && vp[vlen] != ';' && vp[vlen] != '#' && vlen < 31) vlen++;
-        while (vlen > 0 && (vp[vlen-1] == ' ' || vp[vlen-1] == '\t')) vlen--;
-        memcpy(val, vp, (size_t)vlen);
-        str_lower(val);
+        int i = 0;
+        while (vp[i] && i < 31) { val[i] = vp[i]; i++; }
+        ini_strip_comment(val);
+        ini_str_lower(val);
 
         bool known_key = false;
 
@@ -178,6 +160,21 @@ static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass
                 else if (cur_ch >= 0)
                     out->ch[cur_ch].debounce_ms = dv;
             }
+        } else if (strcmp(key, "wav_id") == 0) {
+            // Only meaningful in a named channel section (not [defaults]).
+            // Spec §2.3: wav_id 0..WAV_COUNT-1; out-of-range → warning, compiled default kept.
+            known_key = (sec == SEC_CHANNEL);
+            if (!defaults_pass && sec == SEC_CHANNEL && cur_ch >= 0) {
+                char *end;
+                long  v = strtol(val, &end, 10);
+                if (end == val || *end != '\0' || v < 0 || v >= WAV_COUNT) {
+                    warns++;  // non-numeric, empty, or out of range
+                } else {
+                    out->ch[cur_ch].wav_id_override = (uint8_t)v;
+                }
+            } else if (!defaults_pass && sec == SEC_DEFAULTS) {
+                known_key = false;  // wav_id in [defaults] is unknown
+            }
         }
 
         if (!known_key && !defaults_pass) warns++;  // unknown key
@@ -191,9 +188,10 @@ static uint8_t parse_pass(const char *text, alarm_cfg_t *out, bool defaults_pass
 
 void alarm_cfg_fallback(alarm_cfg_t *out) {
     for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-        out->ch[i].debounce_ms = CHANNEL_TABLE[i].debounce_ms;
-        out->ch[i].active_high = true;
-        out->ch[i].pull        = ALARM_PULL_DOWN;
+        out->ch[i].debounce_ms    = CHANNEL_TABLE[i].debounce_ms;
+        out->ch[i].active_high    = true;
+        out->ch[i].pull           = ALARM_PULL_DOWN;
+        out->ch[i].wav_id_override = 0xFF;  // no override; use ALARM_TABLE compiled default
     }
 }
 

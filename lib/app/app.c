@@ -15,10 +15,12 @@
 #include "test_mode.h"
 #include "channel_table.h"
 #include "light_cfg.h"
+#include "audio_cfg.h"
 #include "pixel_lighting.h"
 #include "dimmer_gesture.h"
 #include "eeprom_map.h"
 #include "alarm_cfg.h"
+#include "alarm_table.h"
 #include "hal.h"
 
 static bool           g_raw_ch[CHANNEL_COUNT];
@@ -48,7 +50,20 @@ void app_init(void) {
         dbnc_ms[i] = g_alarm_cfg.ch[i].debounce_ms;
     debouncer_init(dbnc_ms);
 
+    // Load audio gain from SD and apply to the amplifier.
+    audio_cfg_t audio_cfg;
+    audio_cfg_load(&audio_cfg);
+    hal_audio_set_gain(audio_cfg.gain);
+
     alarm_engine_init();
+    // Apply any wav_id overrides from ALARMS.CFG; only direct alarms have a channel.
+    for (uint8_t i = 0; i < ALARM_COUNT; i++) {
+        if (ALARM_TABLE[i].kind == SRC_DIRECT) {
+            uint8_t ch_idx = ALARM_TABLE[i].channel;
+            if (g_alarm_cfg.ch[ch_idx].wav_id_override < WAV_COUNT)
+                alarm_engine_set_wav_override(i, g_alarm_cfg.ch[ch_idx].wav_id_override);
+        }
+    }
     audio_queue_init();
     button_init();
     dimmer_init();
