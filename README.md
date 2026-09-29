@@ -57,24 +57,34 @@ test/
 ## State machine (alarm engine)
 
 ```
-                  condition
-                  asserted
-   ┌──────────┐ ────────────► ┌───────────────┐
-   │ INACTIVE │                │ PENDING_ACK   │ ◄──── audio fires here
-   │          │ ◄──────────── │  (flashing)   │
-   └──────────┘   condition   └───────────────┘
-        ▲          cleared            │
-        │                             │ button press
-        │       condition             ▼
-        │       cleared       ┌───────────────┐
-        └─────────────────── │ ACKNOWLEDGED  │
-                              │   (steady)    │
-                              └───────────────┘
+              condition asserts
+              [AUDIO queued]
+ ┌──────────┐ ──────────────────► ┌─────────────────┐
+ │ INACTIVE │                      │  PENDING_ACK    │
+ └──────────┘                      │   (flashing)    │
+      ▲  ▲                         └────────┬────────┘
+      │  │                          cond    │ condition
+      │  │          condition       re-     │ clears
+      │  │          re-asserts    asserts   │
+      │  │          [SILENT]        ▲       ▼
+      │  │      button       ┌─────────────────────┐
+      │  └─────── press ─── │  PENDING_ACK_CLEARED │
+      │                      │      (flashing)      │
+      │                      └──────────────────────┘
+      │      condition
+      │      cleared         ┌─────────────────┐
+      └───────────────────── │  ACKNOWLEDGED   │
+                              │    (steady)     │
+                              └─────────────────┘
 ```
 
+An unacknowledged alarm always latches: if the input de-asserts before the pilot presses the button, the alarm moves to `PENDING_ACK_CLEARED` and keeps flashing until acknowledged. This ensures every onset is consciously dismissed.
+
+A re-assertion from `PENDING_ACK_CLEARED` returns to `PENDING_ACK` **silently** — the audio already announced this onset, and the button is already flashing. Audio fires only on the `INACTIVE → PENDING_ACK` transition (fresh onset from a cleared-and-acked state).
+
 LED display is computed *from* state, not stored:
-- `display_color = max_severity_among({PENDING_ACK ∪ ACKNOWLEDGED})`
-- `flashing = any_alarm_in_PENDING_ACK`
+- `display_color = max_severity_among({PENDING_ACK ∪ PENDING_ACK_CLEARED ∪ ACKNOWLEDGED})`
+- `flashing = any_alarm_in_{PENDING_ACK ∪ PENDING_ACK_CLEARED}`
 - `duty = max(MC_FLOOR, dimmer_norm)`
 
-This decoupling makes re-trigger (spec §4.6) free: a cleared ACKNOWLEDGED alarm goes INACTIVE; the next assertion is just another normal transition that fires audio again.
+Re-trigger (spec §4.6): a cleared-and-acked alarm returns to INACTIVE; the next assertion is a fresh `INACTIVE → PENDING_ACK` transition that fires audio again.
